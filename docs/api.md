@@ -1,0 +1,72 @@
+# API and agent integration
+
+The local daemon listens on `127.0.0.1:31415` and protects `/api/v1`, `/mcp`, and WebSocket events with a generated bearer token. `/health` is intentionally unauthenticated and returns no sensitive state.
+
+Machine-readable contracts are committed under `packages/contracts/schema`, `packages/contracts/openapi`, `packages/contracts/mcp`, and `packages/contracts/proto`. Regenerate them with `npm run artifacts`; CI rejects stale output.
+
+## Agent connection choices
+
+External agents should connect to MCP over stdio (`npm run mcp`) or Streamable HTTP (`/mcp`). The compact tool surface supports project inspection, capability/operation discovery, atomic transactions, draft commit/rollback, rendering, and structured failure results. The full operation taxonomy is retrieved only when needed through `operations.search` and operation resources.
+
+Operation discovery distinguishes `implemented` low-level transaction operations from `service` workflows such as caption interchange, previews, renders, and OTIO. Both are available, but only `implemented` entries may appear in a transaction's `operations` array; service entries are invoked through their REST or MCP contract. `contract` entries are intentionally unavailable until their implementation wave lands.
+
+Asset intelligence uses the same job and capability contracts. `POST /api/v1/projects/{projectId}/assets/{assetId}/analysis` and MCP `asset.analyze` run installed analyzers, while `POST /api/v1/assets/search` and MCP `asset.search` return indexed timestamped segments. The baseline includes deterministic metadata and approved local SRT/WebVTT parsing. Hash-pinned whisper.cpp transcription and FFmpeg silence, scene, and beat/onset adapters can be enabled with audited local manifests; ONNX analyzers and HNSW acceleration remain gated. Semantic search accepts an externally produced query embedding and currently uses exact cosine scoring.
+
+`POST /api/v1/semantic/find` and MCP `semantic.find` provide typed speaker, quote, scene, object, silence, and best-take lookup over those artifacts. `POST /api/v1/semantic/remove-silences/plan` and MCP `semantic.remove_silences.plan` are deliberately non-mutating: they map source-time silence artifacts through selected clips and return at most 200 normal `clip.split`/`clip.ripple_delete` operations. Submit that returned list to the standard transaction validation, preview, and commit flow.
+
+`POST /api/v1/semantic/make-vertical/plan` and MCP `semantic.make_vertical.plan` apply the same rule to portrait conversion. They return one reversible sequence-format operation plus per-clip scale operations using an explicit `cover` or `contain` policy. The deterministic center-frame heuristic always warns that faces, text, and focal subjects need preview evaluation before commit.
+
+Caption interchange is available through `POST /api/v1/imports/captions`, `POST /api/v1/exports/captions`, and MCP `caption.import`/`caption.export`. Import parses SRT or WebVTT into canonical rational-time cues and submits one ordinary `caption.track.add` transaction, so validate, preview, commit, idempotency, revision conflicts, and undo behave exactly like direct editing operations. Export reads an explicit revision when supplied and reports millisecond rounding or styling that SRT/WebVTT cannot represent.
+
+When the audited LGPL qtext module is available, the MLT adapter renders plain title items and non-overlapping caption cues from a normalized style allowlist: font family/size/style/weight, foreground/background/outline colors, decoration, padding, alignment, safe-area placement, opacity, and deterministic typewriter animation. Unknown style or template semantics and word-level highlighting return `CAPABILITY_UNAVAILABLE` instead of being dropped. Font files and Qt redistribution remain release-audit inputs.
+
+`POST /api/v1/assets/imports` and MCP `asset.import` accept an approved absolute local path or `file:` URI, calculate its SHA-256 identity, and atomically register it. Set `managed: true` to copy the source into the project bundle and store a portable `frameos:` URI. Video/audio/image imports remain valid when the native probe is unavailable, but return `PROBE_UNAVAILABLE` and never invent codec, stream, or duration data.
+
+`POST /api/v1/projects/{projectId}/assets/{assetId}/proxies` and MCP `asset.proxy.create` start an idempotent, capability-gated proxy job. The isolated worker emits a bounded, aspect-preserving MP4 into the project bundle; FrameOS hashes it and commits an ordinary `asset.proxy.create` operation only if the request's base revision is still current. A failed transcode, cancellation, or revision conflict removes the unregistered derivative. The default MPEG-4/AAC path is exposed only when the audited MLT avformat producer and consumer are present, and packaging still requires the codec/license release gate.
+
+`POST /api/v1/projects/{projectId}/assets/{assetId}/thumbnails` and MCP `asset.thumbnail.create` render a bounded PNG at rational source time from an immutable project revision. The image and its provenance are SHA-256 identified and exposed only through authenticated job artifact URLs. Thumbnail jobs do not mutate canonical project state.
+
+The built-in planner is optional. Configure it without writing credentials into a project:
+
+```powershell
+$env:FRAMEOS_OPENAI_API_KEY = "..."
+$env:FRAMEOS_OPENAI_MODEL = "your-supported-model"
+npm run dev
+```
+
+`FRAMEOS_OPENAI_BASE_URL` may point at a compatible Responses endpoint. Agent sessions persist provider/model identity, approval mode, operation families, and budgets, but never the API key. Planning is non-mutating. `POST /api/v1/agents/runs/{runId}/execute` accepts typed low-level operations, overwrites their provenance with the session identity, validates budgets and allowed operation families, and creates a draft. Autonomous sessions commit that draft; supervised sessions create a durable approval; propose-only sessions leave an uncommitted draft.
+
+Each draft is persisted and evaluated for canonical timeline invariants, offline media, caption collisions, and extreme audio gain. `POST /api/v1/agents/runs/{runId}/revise` atomically replaces the uncommitted operation set, rejects a superseded approval, and evaluates the replacement within the session's maximum three-cycle budget. `POST /api/v1/agents/runs/{runId}/evaluate` re-runs the checks without changing the draft; `GET /api/v1/agents/runs/{runId}/evaluations` returns the trace. Rendered composition, continuity, and pacing checks are recorded as `unavailable` until an audited preview worker and evaluation model are configured, rather than being reported as passes.
+
+`POST /api/v1/previews` accepts the generated `PreviewRequest` union. A source is either an immutable `{ "type": "revision", "revision": n }` or isolated `{ "type": "draft", "draftId": "…" }`. Exact-frame, bounded-region, and contact-sheet previews use rational time and the final-render graph compiler with preview dimensions. Contact sheets evenly sample up to 64 unique PNG frames, retain row/column metadata for client layout, and record the sampled frame numbers in provenance. Completed jobs contain `PreviewArtifact` references such as `/api/v1/jobs/{jobId}/artifacts/{name}`; retrieving an artifact requires the same bearer authorization as other API resources, and job responses never disclose daemon filesystem paths. Waveform previews are deterministic native SVGs for PCM16 little-endian WAV assets; other audio formats remain capability-gated.
+
+When an MLT worker is available, every agent evaluation renders and records a representative frame. A successful render is a warning—not a visual-quality pass—until a configured model or human has actually reviewed the artifact. A render failure is a failing evaluation check and prevents an automatic commit.
+
+Pending approvals are available at `GET /api/v1/approvals`. A decision through `POST /api/v1/approvals/{approvalId}/decision` atomically commits or rolls back the associated draft subject to the original revision precondition.
+
+## Operation lifecycle
+
+1. Read project state and its `ETag`/revision.
+2. Search or describe operations.
+3. Submit a transaction with that `baseRevision` and a stable idempotency key.
+4. Use `validate` first for cheap invariant/capability checks.
+5. Use `preview` to obtain an isolated draft.
+6. Commit the draft only after verification/approval, or delete it to roll back.
+
+No client should construct MLT properties. A capability marked unavailable must be treated as unavailable even if a similarly named host plugin happens to exist.
+
+Agents should select normalized capabilities such as `frameos.generator.solid`, `frameos.video.transform`, `frameos.video.crop`, `frameos.audio.gain`, `frameos.audio.pan`, `frameos.transition.dissolve`, and `frameos.transition.audio_crossfade`. Their descriptors expose FrameOS parameter contracts and list the audited native dependencies in metadata. Raw `mlt.*` service records are diagnostic inventory; they are not effect parameter contracts. The solid generator accepts only `#RRGGBB` plus normalized opacity, and transition ranges must straddle a same-track edit with sufficient source handles.
+
+Color operations target normalized `frameos.color.*` effect instances. Typed operations cover exposure, contrast, saturation, white balance, channel curves, lift/gamma/gain, LUT application/removal, and OCIO transforms; sequence operations own working color space and HDR mastering metadata. Static, unmasked `frameos.color.primary` effects compile at clip, video-track, or sequence-output scope in the fixed order exposure (−3 to +3 EV) → contrast/saturation (saturation up to 3.0) → white-balance temperature → RGB/luma curves → 3D LUT. Curves use monotonic PCHIP interpolation and strict increasing normalized inputs; the current temperature link requires neutral tint. Audited project-managed `.cube` LUTs render at intensity 1.0 (or bypass at 0.0) with trilinear or tetrahedral interpolation. Wider canonical values, non-neutral tint, partial LUT mixes, animation, ranges, masks, lift/gamma/gain, and OCIO return `CAPABILITY_UNAVAILABLE` at render validation until an exact adapter is installed; they are never clamped or ignored.
+
+Audio processing follows the same adapter-neutral rule with `frameos.audio.*` effect instances. Typed, reversible operations cover fades, loudness targets, parametric EQ bands, compression, limiting, denoise configuration, sidechain ducking, and voice enhancement. Static `frameos.audio.channel-strip@1.0.0` effects now compile at clip, track, and sequence-output scope in the fixed order denoise → EQ → compressor → limiter → integrated EBU R128 normalization → fades. The adapter maps all five EQ band shapes and all four canonical fade curves, uses sample-accurate rational fade boundaries, uses RMS/downward compression with maximum channel linking, disables limiter auto-level while compensating lookahead latency, and rejects controls outside the discovered FFmpeg service ranges. Profile-guided denoise, ducking, voice enhancement, effect ranges, and automation remain explicit capability errors. A manifest-gated FFmpeg adapter can also produce reproducible beat/onset candidates through the generic analysis API; automatic shot selection and A/V synchronization remain capability-gated.
+
+`POST /api/v1/semantic/match-cuts-to-music/plan` and MCP `semantic.match_cuts_to_music.plan` map indexed beat/onset ranges through an unretimed music clip into sequence time, then return ordinary `clip.split` operations for selected tracks. Confidence, minimum-spacing, and 200-operation limits are enforced before any mutation. The planner inserts edit boundaries only; shot selection and pacing still require agent or human preview evaluation.
+
+`POST /api/v1/semantic/add-dynamic-captions/plan` and MCP `semantic.add_dynamic_captions.plan` map transcript segments and optional word timestamps through selected unretimed source clips. The result is one ordinary caption-track operation followed by cue operations, with source artifact and clip provenance embedded in each cue. Missing word timestamps are reported as warnings; no project state changes until the caller validates, previews, or commits the returned operations.
+
+## OTIO interchange
+
+`POST /api/v1/imports/otio` accepts `{ "document": <OTIO JSON>, "projectName": "optional" }` and creates a new project. `POST /api/v1/exports/otio` accepts a project ID plus optional sequence ID and revision. Both return an `InterchangeReport` whose counts and issues distinguish exact, approximated, dropped, and unsupported data.
+
+Clips, gaps, tracks, external media references, and rational timing use standard OTIO objects. The complete canonical snapshot is also namespaced under `metadata.frameos`, so FrameOS-to-FrameOS round trips retain advanced state. Other OTIO clients can ignore that metadata; the report identifies properties those clients will not reproduce. Imports still enforce configured media roots and never fetch remote references.

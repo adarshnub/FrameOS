@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frameos.dev/schema/v1/media-probe-result.json",
+  "type": "object",
+  "properties": {
+    "streams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "video",
+              "audio",
+              "subtitle",
+              "data"
+            ]
+          },
+          "codec": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "duration": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "rate": {
+                "type": "object",
+                "properties": {
+                  "numerator": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "denominator": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  }
+                },
+                "required": [
+                  "numerator",
+                  "denominator"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "value",
+              "rate"
+            ],
+            "additionalProperties": false
+          },
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 65535
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 65535
+          },
+          "frameRate": {
+            "type": "object",
+            "properties": {
+              "numerator": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 1000000
+              },
+              "denominator": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "numerator",
+              "denominator"
+            ],
+            "additionalProperties": false
+          },
+          "sampleRate": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 768000
+          },
+          "channels": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 128
+          },
+          "metadata": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "index",
+          "kind",
+          "codec",
+          "metadata"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "duration": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "rate": {
+          "type": "object",
+          "properties": {
+            "numerator": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 1000000
+            },
+            "denominator": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "numerator",
+            "denominator"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "value",
+        "rate"
+      ],
+      "additionalProperties": false
+    },
+    "metadata": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "streams",
+    "metadata"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,19 @@
+# ADR 0005: Portable project bundles with derived sidecars
+
+Status: accepted
+
+A project bundle contains:
+
+```text
+project.frameos.json
+history/operations.ndjson
+revisions/<revision>.frameos.json
+drafts/<draft-id>/...
+analysis/...
+cache/...
+proxies/...
+previews/...
+renders/...
+```
+
+The JSON snapshot and append-only operation history are authoritative. SQLite WAL contains jobs, agent sessions/runs, idempotency/runtime indexes, and future FTS/vector indexes; it is rebuildable and is not the project format. Large artifacts are content-addressed sidecars referenced by URI.

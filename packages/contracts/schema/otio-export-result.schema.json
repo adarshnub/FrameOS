@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frameos.dev/schema/v1/otio-export-result.json",
+  "type": "object",
+  "properties": {
+    "document": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "otio"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "import",
+            "export"
+          ]
+        },
+        "exact": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "approximated": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unsupported": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "issues": {
+          "maxItems": 100000,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "approximated",
+                  "dropped",
+                  "unsupported"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "required": [
+              "path",
+              "status",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "format",
+        "direction",
+        "exact",
+        "approximated",
+        "dropped",
+        "unsupported",
+        "issues"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "document",
+    "report"
+  ],
+  "additionalProperties": false
+}

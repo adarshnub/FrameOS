@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frameos.dev/schema/v1/analyzer-descriptor.json",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "capabilityId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "outputTypes": {
+      "minItems": 1,
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "assetKinds": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "video",
+          "audio",
+          "image",
+          "image_sequence",
+          "subtitle",
+          "font",
+          "generated"
+        ]
+      }
+    },
+    "available": {
+      "type": "boolean"
+    },
+    "deterministic": {
+      "type": "boolean"
+    },
+    "modelHash": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 256
+    },
+    "binaryHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "bundleHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "binaryLicense": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "modelLicense": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "reasonUnavailable": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "parameterSchema": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "capabilityId",
+    "name",
+    "description",
+    "outputTypes",
+    "assetKinds",
+    "available",
+    "deterministic",
+    "parameterSchema"
+  ],
+  "additionalProperties": false
+}

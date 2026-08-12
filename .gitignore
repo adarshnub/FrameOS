@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.frameos-data/
+.env
+*.log
+*.tmp
+native/engine-worker/build/
+/build/
+.DS_Store
+Thumbs.db

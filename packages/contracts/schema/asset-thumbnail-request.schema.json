@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frameos.dev/schema/v1/asset-thumbnail-request.json",
+  "type": "object",
+  "properties": {
+    "projectId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "assetId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512
+    },
+    "at": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "rate": {
+          "type": "object",
+          "properties": {
+            "numerator": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 1000000
+            },
+            "denominator": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "numerator",
+            "denominator"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "value",
+        "rate"
+      ],
+      "additionalProperties": false
+    },
+    "maxWidth": {
+      "default": 640,
+      "type": "integer",
+      "minimum": 80,
+      "maximum": 3840
+    },
+    "maxHeight": {
+      "default": 360,
+      "type": "integer",
+      "minimum": 45,
+      "maximum": 2160
+    }
+  },
+  "required": [
+    "projectId",
+    "assetId",
+    "revision",
+    "idempotencyKey",
+    "at",
+    "maxWidth",
+    "maxHeight"
+  ],
+  "additionalProperties": false
+}

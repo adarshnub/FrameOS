@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  control-plane:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - run: cmake -S native/engine-worker -B build/engine-worker -DFRAMEOS_WITH_MLT=OFF
+      - run: cmake --build build/engine-worker --config Release
+      - run: ctest --test-dir build/engine-worker -C Release --output-on-failure
+      - run: npm run sbom
+      - run: cpack --config build/engine-worker/CPackConfig.cmake -C Release -B build/packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frameos-native-${{ matrix.os }}
+          path: |
+            build/packages/*
+            build/frameos.cdx.json

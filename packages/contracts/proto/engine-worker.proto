@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package frameos.worker.v1;
+
+// The subprocess transport is newline-delimited JSON in the first vertical
+// slice. These messages define the stable boundary for the upcoming gRPC/IPC
+// transport and keep MLT-native properties out of the control plane.
+service EngineWorker {
+  rpc GetCapabilities(CapabilityRequest) returns (CapabilityResponse);
+  rpc Render(RenderRequest) returns (stream RenderEvent);
+  rpc Analyze(AnalyzeRequest) returns (stream AnalyzeEvent);
+  rpc GenerateWaveform(WaveformRequest) returns (WaveformResponse);
+  rpc CreateProxy(ProxyRequest) returns (ProxyResponse);
+  rpc CreateThumbnail(ThumbnailRequest) returns (ThumbnailResponse);
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+}
+
+message CapabilityRequest {}
+
+message CapabilityDescriptor {
+  string id = 1;
+  string kind = 2;
+  string version = 3;
+  bool available = 4;
+  string unavailable_reason = 5;
+  map<string, string> metadata = 6;
+}
+
+message CapabilityResponse {
+  repeated CapabilityDescriptor capabilities = 1;
+  string engine_version = 2;
+  string manifest_hash = 3;
+}
+
+message RenderRequest {
+  string job_id = 1;
+  string project_id = 2;
+  uint64 revision = 3;
+  string compiled_graph_uri = 4;
+  string output_uri = 5;
+  string render_profile_json = 6;
+  optional uint64 start_frame = 7;
+  optional uint64 end_frame = 8;
+  string preview_kind = 9;
+}
+
+message RenderEvent {
+  string job_id = 1;
+  string state = 2;
+  double progress = 3;
+  string error_code = 4;
+  string message = 5;
+}
+
+message AnalyzeRequest {
+  string request_id = 1;
+  string analyzer_id = 2;
+  string analyzer_version = 3;
+  string asset_id = 4;
+  string asset_path = 5;
+  string asset_hash = 6;
+  string asset_kind = 7;
+  string parameters_json = 8;
+  string model_path = 9;
+  string model_hash = 10;
+  string executable_hash = 11;
+}
+
+message AnalyzeEvent {
+  string request_id = 1;
+  string state = 2;
+  double progress = 3;
+  string output_type = 4;
+  string segments_json = 5;
+  string metadata_json = 6;
+  string error_code = 7;
+  string message = 8;
+}
+
+message WaveformRequest {
+  string job_id = 1;
+  string asset_path = 2;
+  string asset_hash = 3;
+  string output_uri = 4;
+  uint32 width = 5;
+  uint32 height = 6;
+  uint64 start_ms = 7;
+  optional uint64 end_ms = 8;
+  optional uint32 channel = 9;
+}
+
+message WaveformResponse {
+  uint32 sample_rate = 1;
+  uint32 channels = 2;
+  optional uint32 channel = 3;
+  uint64 sample_frames = 4;
+  uint64 start_ms = 5;
+  uint64 end_ms = 6;
+}
+
+message ProxyRequest {
+  string job_id = 1;
+  string asset_path = 2;
+  string asset_hash = 3;
+  string output_uri = 4;
+  uint32 max_width = 5;
+  uint32 max_height = 6;
+}
+
+message ProxyResponse {
+  uint32 width = 1;
+  uint32 height = 2;
+  string container = 3;
+  string video_codec = 4;
+  string audio_codec = 5;
+  string output_hash = 6;
+}
+
+message ThumbnailRequest {
+  string job_id = 1;
+  string asset_path = 2;
+  string asset_hash = 3;
+  string output_uri = 4;
+  uint64 time_ms = 5;
+  uint32 max_width = 6;
+  uint32 max_height = 7;
+}
+
+message ThumbnailResponse {
+  uint32 width = 1;
+  uint32 height = 2;
+  uint64 time_ms = 3;
+  uint64 frame = 4;
+  string format = 5;
+  string output_hash = 6;
+}
+
+message CancelRequest { string job_id = 1; }
+message CancelResponse { bool accepted = 1; }

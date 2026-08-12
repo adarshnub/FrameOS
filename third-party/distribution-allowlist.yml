@@ -1,0 +1,92 @@
+schemaVersion: 1
+status: pre-release-review-required
+policy:
+  permitLicenses:
+    - LGPL-2.1-or-later
+    - LGPL-3.0-or-later
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - MIT
+    - Apache-2.0
+  denyFeatures:
+    - GPL MLT applications including melt
+    - GPL or nonfree FFmpeg configuration
+    - unaudited OpenFX plugins
+    - unaudited model weights
+mlt:
+  version: 7.40.0
+  linkage: dynamic
+  services:
+    producer:
+      - avformat
+      - avformat-novalidate
+      - color
+      - xml
+    consumer:
+      - avformat
+    filter:
+      - affine
+      - avfilter.acompressor
+      - avfilter.afade
+      - avfilter.afftdn
+      - avfilter.alimiter
+      - avfilter.colortemperature
+      - avfilter.curves
+      - avfilter.eq
+      - avfilter.equalizer
+      - avfilter.exposure
+      - avfilter.highpass
+      - avfilter.highshelf
+      - avfilter.loudnorm
+      - avfilter.lowpass
+      - avfilter.lowshelf
+      - avfilter.lut3d
+      - avfilter.volume
+      - crop
+      - panner
+      - qtext
+    transition:
+      - luma
+      - mix
+ffmpeg:
+  linkage: dynamic
+  requiredConfiguration:
+    - --disable-gpl
+    - --disable-nonfree
+  proxyProfile:
+    container: mp4
+    videoCodec: mpeg4
+    audioCodec: aac
+    status: release-review-required
+  thumbnailProfile:
+    container: image2
+    videoCodec: png
+    status: release-review-required
+  serviceConditions:
+    avfilter.acompressor: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.afade: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.afftdn: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.alimiter: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.colortemperature: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.curves: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.eq: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.equalizer: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.exposure: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.highpass: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.highshelf: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.loudnorm: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.lowpass: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.lowshelf: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.lut3d: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+    avfilter.volume: Only available when provided by the reviewed avformat module linked to this LGPL/nonfree-disabled FFmpeg build.
+analyzers:
+  runtimePolicy:
+    - External analyzers require an explicitly configured manifest.
+    - Executables, models, and auxiliary resources must match pinned SHA-256 values.
+    - Runtime availability does not grant redistribution approval.
+  bundled: []
+releaseGate:
+  - Generate an SBOM from the exact packaged binaries.
+  - Verify runtime modules match this allowlist.
+  - Record codec, font, plugin, and model redistribution decisions.
+  - Obtain legal approval before public distribution.

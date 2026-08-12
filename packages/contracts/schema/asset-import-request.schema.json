@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frameos.dev/schema/v1/asset-import-request.json",
+  "type": "object",
+  "properties": {
+    "projectId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "baseRevision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 512
+    },
+    "uri": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "video",
+        "audio",
+        "image",
+        "image_sequence",
+        "subtitle",
+        "font",
+        "generated"
+      ]
+    },
+    "managed": {
+      "default": false,
+      "type": "boolean"
+    },
+    "licenseMetadata": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "projectId",
+    "baseRevision",
+    "idempotencyKey",
+    "uri",
+    "managed",
+    "licenseMetadata"
+  ],
+  "additionalProperties": false
+}

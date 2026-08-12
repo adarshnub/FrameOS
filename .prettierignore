@@ -1,0 +1,6 @@
+node_modules/
+dist/
+build/
+packages/contracts/schema/
+packages/contracts/openapi/
+packages/contracts/mcp/manifest.json

@@ -1,0 +1,16 @@
+{
+  "name": "@frameos/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "types": "./dist/client.d.ts",
+  "exports": "./dist/client.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@frameos/contracts": "0.1.0"
+  }
+}

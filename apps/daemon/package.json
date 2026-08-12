@@ -1,0 +1,24 @@
+{
+  "name": "@frameos/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build --workspace @frameos/contracts && tsx watch src/index.ts",
+    "mcp": "npm run build --workspace @frameos/contracts && tsx src/mcp-stdio.ts",
+    "pretest": "npm run build --workspace @frameos/contracts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/websocket": "^11.3.0",
+    "@frameos/contracts": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ajv": "^8.17.1",
+    "fastify": "^5.11.3",
+    "zod": "^4.4.3"
+  }
+}

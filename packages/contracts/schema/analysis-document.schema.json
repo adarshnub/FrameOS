@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frameos.dev/schema/v1/analysis-document.json",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "artifactId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "projectId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "assetId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "assetHash": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 256
+    },
+    "analyzerId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "analyzerVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "parametersHash": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "modelHash": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 256
+    },
+    "binaryHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "bundleHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "segments": {
+      "maxItems": 1000000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "range": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "rate": {
+                    "type": "object",
+                    "properties": {
+                      "numerator": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      },
+                      "denominator": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      }
+                    },
+                    "required": [
+                      "numerator",
+                      "denominator"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "value",
+                  "rate"
+                ],
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "rate": {
+                    "type": "object",
+                    "properties": {
+                      "numerator": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      },
+                      "denominator": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      }
+                    },
+                    "required": [
+                      "numerator",
+                      "denominator"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "value",
+                  "rate"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "start",
+              "duration"
+            ],
+            "additionalProperties": false
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1000000
+          },
+          "labels": {
+            "default": [],
+            "maxItems": 256,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "speaker": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "embedding": {
+            "minItems": 1,
+            "maxItems": 4096,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "metadata": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "labels",
+          "metadata"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "metadata": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "artifactId",
+    "projectId",
+    "assetId",
+    "assetHash",
+    "analyzerId",
+    "analyzerVersion",
+    "parametersHash",
+    "type",
+    "segments",
+    "metadata"
+  ],
+  "additionalProperties": false
+}

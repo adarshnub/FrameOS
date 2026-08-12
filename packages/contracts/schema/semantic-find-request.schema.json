@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frameos.dev/schema/v1/semantic-find-request.json",
+  "type": "object",
+  "properties": {
+    "projectId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "speaker",
+        "quote",
+        "scene",
+        "object",
+        "silence",
+        "best_take"
+      ]
+    },
+    "query": {
+      "default": "",
+      "type": "string",
+      "maxLength": 8192
+    },
+    "assetIds": {
+      "maxItems": 10000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      }
+    },
+    "limit": {
+      "default": 50,
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 500
+    }
+  },
+  "required": [
+    "projectId",
+    "kind",
+    "query",
+    "limit"
+  ],
+  "additionalProperties": false
+}
