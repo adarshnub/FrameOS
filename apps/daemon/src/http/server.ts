@@ -1,7 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, readFile, rm } from "node:fs/promises";
+import { basename, extname, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
 import websocket from "@fastify/websocket";
 import {
   errorEnvelope,
@@ -14,15 +17,18 @@ import {
   captionExportRequestSchema,
   captionImportRequestSchema,
   createId,
+  executableOperationSchemas,
   FrameOSError,
   otioExportRequestSchema,
   otioImportRequestSchema,
   previewRequestSchema,
   semanticAddDynamicCaptionsRequestSchema,
+  semanticCreateHighlightRequestSchema,
   semanticFindRequestSchema,
   semanticMakeVerticalRequestSchema,
   semanticMatchCutsToMusicRequestSchema,
   semanticRemoveSilencesRequestSchema,
+  semanticSyncBrollRequestSchema,
   successEnvelope,
 } from "@frameos/contracts";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -43,6 +49,8 @@ import {
   inspectorHtml,
   inspectorJavaScript,
 } from "../inspector/page.js";
+import { landingCss, landingHtml, landingJavaScript } from "../site/page.js";
+import type { LogLevel } from "../observability/observability-service.js";
 
 const createProjectInputSchema = z
   .object({
@@ -82,7 +90,33 @@ function tokenMatches(
   );
 }
 
+function requestAuthorization(request: {
+  headers: Record<string, string | string[] | undefined>;
+}): string | undefined {
+  if (typeof request.headers.authorization === "string")
+    return request.headers.authorization;
+  const protocols = request.headers["sec-websocket-protocol"];
+  const values = Array.isArray(protocols)
+    ? protocols
+    : typeof protocols === "string"
+      ? protocols.split(",")
+      : [];
+  const tokenProtocol = values
+    .map((value) => value.trim())
+    .find((value) => value.startsWith("frameos-token."));
+  if (tokenProtocol === undefined) return undefined;
+  try {
+    return `Bearer ${Buffer.from(
+      tokenProtocol.slice("frameos-token.".length),
+      "base64url",
+    ).toString("utf8")}`;
+  } catch {
+    return undefined;
+  }
+}
+
 function requiredScope(url: string, method: string): BearerTokenScope {
+  if (url.startsWith("/api/v1/admin")) return "admin";
   if (url.startsWith("/mcp")) return "mcp";
   if (url.startsWith("/api/v1/exports/")) return "project:read";
   if (
@@ -163,7 +197,10 @@ export async function buildHttpServer(
         ? false
         : {
             level: process.env.FRAMEOS_LOG_LEVEL ?? "info",
-            redact: ["req.headers.authorization"],
+            redact: [
+              "req.headers.authorization",
+              "req.headers.sec-websocket-protocol",
+            ],
           },
     bodyLimit: 8 * 1_024 * 1_024,
     trustProxy: false,
@@ -176,11 +213,17 @@ export async function buildHttpServer(
     timeWindow: "1 minute",
   });
   await app.register(websocket, { options: { maxPayload: 1 * 1_024 * 1_024 } });
+  await app.register(multipart, {
+    limits: { files: 1, fields: 0, fileSize: 20 * 1_024 * 1_024 * 1_024 },
+  });
+
+  const requestStartedAt = new WeakMap<object, bigint>();
 
   app.addHook("onRequest", async (request) => {
+    requestStartedAt.set(request, process.hrtime.bigint());
     if (!isProtectedPath(request.url)) return;
     const grant = authorize(
-      request.headers.authorization,
+      requestAuthorization(request),
       services.config,
       requiredScope(request.url, request.method),
     );
@@ -190,6 +233,27 @@ export async function buildHttpServer(
         "authorized remote request",
       );
     }
+  });
+
+  app.addHook("onResponse", async (request, reply) => {
+    const startedAt = requestStartedAt.get(request);
+    const durationMs =
+      startedAt === undefined
+        ? undefined
+        : Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+    services.observability.record({
+      level: reply.statusCode >= 400 ? "error" : "success",
+      category: "http",
+      eventType: "http.request.completed",
+      message: `${request.method} ${request.routeOptions.url} ${reply.statusCode.toString()}`,
+      correlationId: request.id,
+      ...(durationMs === undefined ? {} : { durationMs }),
+      data: {
+        method: request.method,
+        route: request.routeOptions.url,
+        statusCode: reply.statusCode,
+      },
+    });
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -228,6 +292,24 @@ export async function buildHttpServer(
   app.get("/health", async () =>
     successEnvelope({ status: "ok", version: "0.1.0" }),
   );
+
+  app.get("/", async (_request, reply) => {
+    void reply
+      .header(
+        "content-security-policy",
+        "default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      )
+      .type("text/html; charset=utf-8");
+    return landingHtml;
+  });
+  app.get("/site/app.css", async (_request, reply) => {
+    void reply.type("text/css; charset=utf-8");
+    return landingCss;
+  });
+  app.get("/site/app.js", async (_request, reply) => {
+    void reply.type("text/javascript; charset=utf-8");
+    return landingJavaScript;
+  });
 
   app.get("/inspector", async (_request, reply) => {
     void reply
@@ -352,6 +434,65 @@ export async function buildHttpServer(
         `/api/v1/projects/${input.projectId}/assets/${result.asset.id}`,
       );
     return successEnvelope(result);
+  });
+
+  app.post("/api/v1/assets/uploads", async (request, reply) => {
+    const query = z
+      .object({
+        projectId: z.string().uuid(),
+        baseRevision: z.coerce.number().int().nonnegative(),
+        kind: z
+          .enum(["video", "audio", "image", "subtitle", "font"])
+          .optional(),
+      })
+      .strict()
+      .parse(request.query);
+    const part = await request.file();
+    if (part === undefined) {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        "Select one media file to upload",
+        422,
+      );
+    }
+    const originalName = basename(part.filename).slice(0, 255);
+    const extension = extname(originalName).toLowerCase();
+    const safeExtension = /^[.][a-z0-9]{1,12}$/u.test(extension)
+      ? extension
+      : ".upload";
+    const uploadDirectory = resolve(services.config.dataDirectory, "uploads");
+    await mkdir(uploadDirectory, { recursive: true });
+    const temporaryPath = resolve(
+      uploadDirectory,
+      `${createId()}${safeExtension}`,
+    );
+    try {
+      await pipeline(
+        part.file,
+        createWriteStream(temporaryPath, { flags: "wx" }),
+      );
+      if (part.file.truncated) {
+        throw new FrameOSError(
+          "RESOURCE_LIMIT",
+          "Selected media exceeds the 20 GiB local upload limit",
+          413,
+        );
+      }
+      const result = await services.assets.import({
+        projectId: query.projectId,
+        baseRevision: query.baseRevision,
+        idempotencyKey: `browser-upload-${createId()}`,
+        uri: temporaryPath,
+        name: originalName || "Uploaded media",
+        managed: true,
+        ...(query.kind === undefined ? {} : { kind: query.kind }),
+        licenseMetadata: {},
+      });
+      void reply.status(201);
+      return successEnvelope(result);
+    } finally {
+      await rm(temporaryPath, { force: true });
+    }
   });
 
   app.post(
@@ -527,6 +668,16 @@ export async function buildHttpServer(
     );
   });
 
+  app.post("/api/v1/semantic/create-highlight/plan", async (request) => {
+    const input = semanticCreateHighlightRequestSchema.parse(request.body);
+    return successEnvelope(await services.semantic.planCreateHighlight(input));
+  });
+
+  app.post("/api/v1/semantic/sync-broll/plan", async (request) => {
+    const input = semanticSyncBrollRequestSchema.parse(request.body);
+    return successEnvelope(await services.semantic.planSyncBroll(input));
+  });
+
   app.post("/api/v1/transactions", async (request, reply) => {
     const result = await services.transactions.execute(request.body);
     services.events.publish(
@@ -693,12 +844,71 @@ export async function buildHttpServer(
         `Operation ${name} was not found`,
         404,
       );
-    return successEnvelope(operation);
+    const schema =
+      executableOperationSchemas[
+        name as keyof typeof executableOperationSchemas
+      ];
+    return successEnvelope({
+      ...operation,
+      ...(schema === undefined ? {} : { inputSchema: z.toJSONSchema(schema) }),
+    });
   });
 
   app.get("/api/v1/agents/providers", async () =>
     successEnvelope(services.agents.listProviders()),
   );
+
+  app.get("/api/v1/admin/logs", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    const level = z
+      .enum(["debug", "info", "success", "warn", "error"])
+      .optional()
+      .parse(parseQueryString(query.level)) as LogLevel | undefined;
+    const limitValue = parseQueryString(query.limit);
+    const category = parseQueryString(query.category);
+    const projectId = parseQueryString(query.projectId);
+    const search = parseQueryString(query.search);
+    const logs = services.observability.list({
+      ...(level === undefined ? {} : { level }),
+      ...(category === undefined ? {} : { category }),
+      ...(projectId === undefined ? {} : { projectId }),
+      ...(search === undefined ? {} : { search }),
+      ...(limitValue === undefined
+        ? {}
+        : {
+            limit: z.coerce
+              .number()
+              .int()
+              .positive()
+              .max(2_000)
+              .parse(limitValue),
+          }),
+    });
+    return successEnvelope(logs, { total: logs.length });
+  });
+
+  app.get("/api/v1/admin/usage", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    const projectId = parseQueryString(query.projectId);
+    const sessionId = parseQueryString(query.sessionId);
+    const filter = {
+      ...(projectId === undefined ? {} : { projectId }),
+      ...(sessionId === undefined ? {} : { sessionId }),
+    };
+    const records = services.database.listProviderUsage(filter);
+    return successEnvelope(
+      { summary: services.database.summarizeProviderUsage(filter), records },
+      { total: records.length },
+    );
+  });
+
+  app.get("/api/v1/admin/logs/stream", { websocket: true }, (socket) => {
+    const unsubscribe = services.observability.subscribe((entry) => {
+      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(entry));
+    });
+    socket.on("close", unsubscribe);
+    socket.on("error", unsubscribe);
+  });
 
   app.get("/api/v1/agents/sessions", async (request) => {
     const query = request.query as Record<string, unknown>;

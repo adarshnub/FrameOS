@@ -62,7 +62,9 @@ describe("MCP surface", () => {
     expect(names).toContain("semantic.make_vertical.plan");
     expect(names).toContain("semantic.match_cuts_to_music.plan");
     expect(names).toContain("semantic.add_dynamic_captions.plan");
-    expect(names.length).toBeLessThanOrEqual(40);
+    expect(names).toContain("semantic.create_highlight.plan");
+    expect(names).toContain("semantic.sync_broll.plan");
+    expect(names.length).toBeLessThanOrEqual(42);
 
     const created = await client.callTool({
       name: "project.create",

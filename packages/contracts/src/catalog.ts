@@ -4,6 +4,7 @@ export const capabilityKinds = [
   "producer",
   "consumer",
   "filter",
+  "link",
   "transition",
   "analyzer",
   "codec",
@@ -221,9 +222,11 @@ const implementedServiceOperations = new Set([
   "semantic.find_silence",
   "semantic.find_best_take",
   "semantic.remove_silences",
+  "semantic.sync_broll",
   "semantic.make_vertical",
   "semantic.match_cuts_to_music",
   "semantic.add_dynamic_captions",
+  "semantic.create_highlight",
 ]);
 
 const operationFamilies: Record<string, string[]> = {

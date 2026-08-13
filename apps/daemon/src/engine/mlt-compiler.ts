@@ -45,6 +45,7 @@ const capabilityIds = {
   audioLimiter: "mlt.filter.avfilter.alimiter",
   audioDenoise: "mlt.filter.avfilter.afftdn",
   audioFade: "mlt.filter.avfilter.afade",
+  timeremap: "mlt.link.timeremap",
   luma: "mlt.transition.luma",
   mix: "mlt.transition.mix",
   solidGenerator: "frameos.generator.solid",
@@ -515,13 +516,6 @@ function compileCaptionTrack(
 }
 
 function assertNormalizedClipSupport(clip: Clip): void {
-  if (clip.timeMap.length > 0) {
-    capabilityUnavailable(
-      "The MLT adapter cannot compile retimed clips yet",
-      "timeMap",
-      "retime",
-    );
-  }
   if (clip.audio.channelMap.length > 0) {
     capabilityUnavailable(
       "The MLT adapter cannot compile clip channel remapping yet",
@@ -1786,6 +1780,186 @@ function resolveAssetResource(
   return resolve(assetUri);
 }
 
+type TimeMapKeyframe = Clip["timeMap"][number];
+
+function timeMapKeyPositionFrames(
+  clip: Clip,
+  keyframe: TimeMapKeyframe,
+  sequence: Sequence,
+  index: number,
+): number {
+  const rescaled = rescaleTime(keyframe.time, sequence.format.frameRate);
+  if (rescaled.rounded) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} time-map keyframe ${index} is not frame-aligned to the sequence rate`,
+      422,
+    );
+  }
+  return rescaled.time.value;
+}
+
+function sourcePositionSeconds(clip: Clip, value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} time-map source values must be finite numbers`,
+      422,
+      [
+        {
+          field: "timeMap.value",
+          message: "Expected a numeric source position",
+          value,
+        },
+      ],
+    );
+  }
+  return (
+    (value * clip.sourceRange.start.rate.denominator) /
+    clip.sourceRange.start.rate.numerator
+  );
+}
+
+function assertTimeMapSourceRange(
+  clip: Clip,
+  project: Project,
+  sequence: Sequence,
+  keyframe: TimeMapKeyframe,
+): void {
+  if (typeof keyframe.value !== "number" || !Number.isFinite(keyframe.value)) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} time-map source values must be finite numbers`,
+      422,
+    );
+  }
+  const sourceStart = clip.sourceRange.start.value;
+  const sourceEnd =
+    clip.sourceRange.start.value +
+    rescaleTime(clip.sourceRange.duration, clip.sourceRange.start.rate).time
+      .value;
+  if (keyframe.value < sourceStart || keyframe.value > sourceEnd) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} time-map source value is outside its source range`,
+      422,
+      [
+        {
+          field: "timeMap.value",
+          message: "Source position must remain inside the clip source range",
+          value: keyframe.value,
+        },
+      ],
+    );
+  }
+  const asset = project.assets[clip.assetId];
+  if (asset?.duration === undefined) return;
+  const assetEnd = rescaleTime(asset.duration, clip.sourceRange.start.rate);
+  if (assetEnd.rounded || keyframe.value > assetEnd.time.value) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} time-map source value exceeds asset ${asset.id}`,
+      422,
+    );
+  }
+  const timelineDuration = rescaleTime(
+    clip.timelineRange.duration,
+    sequence.format.frameRate,
+  );
+  if (timelineDuration.rounded || timelineDuration.time.value <= 0) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} has a non-frame-aligned retime duration`,
+      422,
+    );
+  }
+}
+
+function compileTimeMapAnimation(
+  clip: Clip,
+  project: Project,
+  sequence: Sequence,
+  options: MltCompilerOptions,
+): string {
+  requireCapability(options, capabilityIds.timeremap, "Clip time remapping");
+  if (clip.timeMap.length < 2) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Retimed clips require at least start and end time-map keyframes",
+      422,
+    );
+  }
+  const numericValues = clip.timeMap.map((keyframe) => {
+    if (
+      typeof keyframe.value !== "number" ||
+      !Number.isFinite(keyframe.value)
+    ) {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        `Clip ${clip.id} time-map source values must be finite numbers`,
+        422,
+      );
+    }
+    return keyframe.value;
+  });
+  const hasDescendingSegment = numericValues.some((value, index) => {
+    const next = numericValues[index + 1];
+    return next !== undefined && next < value;
+  });
+  const wholeClipReverse =
+    hasDescendingSegment &&
+    clip.timeMap.length === 2 &&
+    clip.timeMap.every((keyframe) => keyframe.interpolation === "linear");
+  if (hasDescendingSegment && !wholeClipReverse) {
+    capabilityUnavailable(
+      "Descending speed-ramp segments need audited MLT timeremap boundary handling",
+      "timeMap",
+      "descending-speed-ramp",
+      ["two-key linear reverse", "non-descending speed ramp"],
+    );
+  }
+  const durationFrames = itemDurationFrames(clip, sequence.format.frameRate);
+  return clip.timeMap
+    .map((keyframe, index) => {
+      const frame = timeMapKeyPositionFrames(clip, keyframe, sequence, index);
+      if (
+        (index === 0 && frame !== 0) ||
+        (index === clip.timeMap.length - 1 && frame !== durationFrames)
+      ) {
+        throw new FrameOSError(
+          "VALIDATION_ERROR",
+          "Retimed clips must map from local frame 0 through the clip duration",
+          422,
+        );
+      }
+      if (keyframe.interpolation === "bezier") {
+        capabilityUnavailable(
+          "Bezier retime curves do not have an audited MLT timeremap mapping yet",
+          "timeMap.interpolation",
+          keyframe.interpolation,
+          ["hold", "linear", "smooth"],
+        );
+      }
+      assertTimeMapSourceRange(clip, project, sequence, keyframe);
+      const sourceValue = numericValues[index]!;
+      // FrameOS time maps use half-open source ranges; MLT timeremap samples
+      // concrete source frame positions. For whole-clip reverse, move the
+      // boundary endpoints back one source frame so rendered frames stay inside
+      // the original source range.
+      const adaptedSourceValue = wholeClipReverse
+        ? sourceValue - 1
+        : sourceValue;
+      const operator =
+        keyframe.interpolation === "hold"
+          ? "|="
+          : keyframe.interpolation === "smooth"
+            ? "~="
+            : "=";
+      return `${frame}${operator}${formatNumber(sourcePositionSeconds(clip, adaptedSourceValue))}`;
+    })
+    .join(";");
+}
+
 function compileProducer(
   clip: Clip,
   project: Project,
@@ -1816,6 +1990,23 @@ function compileProducer(
       : asset.uri;
   const resource = resolveAssetResource(selectedUri, options);
   const filters = compileClipFilters(clip, sequence, options);
+  if (clip.timeMap.length > 0) {
+    const timeMap = compileTimeMapAnimation(clip, project, sequence, options);
+    const duration = itemDurationFrames(clip, sequence.format.frameRate);
+    return [
+      `  <chain id="producer_${escapeXml(clip.id)}" out="${duration - 1}">`,
+      `    <property name="mlt_service">avformat-novalidate</property>`,
+      `    <property name="resource">${escapeXml(resource)}</property>`,
+      `    <link id="link_timeremap_${escapeXml(clip.id)}">`,
+      property("mlt_service", "timeremap"),
+      property("time_map", timeMap),
+      property("image_mode", "nearest"),
+      property("pitch", 0),
+      "    </link>",
+      ...filters,
+      "  </chain>",
+    ].join("\n");
+  }
   return [
     `  <producer id="producer_${escapeXml(clip.id)}">`,
     `    <property name="mlt_service">avformat-novalidate</property>`,
@@ -1966,6 +2157,17 @@ function sourceFrameAt(
   timelineFrame: number,
   rate: RationalRate,
 ): number {
+  if (clip.timeMap.length > 0) {
+    const clipStart = itemStartFrames(clip, rate);
+    if (timelineFrame !== clipStart) {
+      capabilityUnavailable(
+        "Retimed clips cannot be split into partial MLT playlist segments yet",
+        "timeMap",
+        "retime-partial-segment",
+      );
+    }
+    return 0;
+  }
   return (
     rescaleTime(clip.sourceRange.start, rate).time.value +
     timelineFrame -
@@ -2189,6 +2391,13 @@ function compileTransitionGraph(
   if (from === undefined || to === undefined || !from.enabled || !to.enabled) {
     capabilityUnavailable(
       "The current MLT transition adapter requires two enabled clip endpoints",
+      "transition.endpoints",
+      { fromItemId: transition.fromItemId, toItemId: transition.toItemId },
+    );
+  }
+  if (from.timeMap.length > 0 || to.timeMap.length > 0) {
+    capabilityUnavailable(
+      "Transitions on retimed clips need an audited partial timeremap mapping",
       "transition.endpoints",
       { fromItemId: transition.fromItemId, toItemId: transition.toItemId },
     );

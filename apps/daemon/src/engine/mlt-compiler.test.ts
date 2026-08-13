@@ -1,6 +1,7 @@
 import {
   createId,
   frameTime,
+  FrameOSError,
   type Asset,
   type Clip,
   type CaptionTrack,
@@ -80,6 +81,229 @@ describe("MLT compiler", () => {
     expect(first).toContain(`producer_${clip.id}`);
     expect(first).toContain("A&amp;B.mp4");
     expect(first).not.toContain("rawMlt");
+  });
+
+  it("compiles normalized clip time maps through the audited MLT timeremap link", () => {
+    const project = createProject({
+      name: "Retime compiler",
+      frameRate: { numerator: 24, denominator: 1 },
+    });
+    const sequence = project.sequences[project.settings.defaultSequenceId]!;
+    const track = sequence.tracks.find(
+      (candidate) => candidate.kind === "video",
+    )!;
+    const asset: Asset = {
+      id: createId(),
+      name: "Retime.mp4",
+      kind: "video",
+      uri: "C:\\media\\Retime.mp4",
+      hash: "fedcba9876543210fedcba9876543210",
+      managed: false,
+      streams: [],
+      duration: frameTime(240, sequence.format.frameRate),
+      proxies: [],
+      analysisRefs: [],
+      licenseMetadata: {},
+      semanticMetadata: {},
+    };
+    const clip: Clip = {
+      id: createId(),
+      name: "Retimed clip",
+      type: "clip",
+      assetId: asset.id,
+      sourceRange: {
+        start: frameTime(12, sequence.format.frameRate),
+        duration: frameTime(48, sequence.format.frameRate),
+      },
+      timelineRange: {
+        start: frameTime(0, sequence.format.frameRate),
+        duration: frameTime(48, sequence.format.frameRate),
+      },
+      enabled: true,
+      locked: false,
+      metadata: {},
+      transform: {
+        positionX: 0,
+        positionY: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        opacity: 1,
+        cropTop: 0,
+        cropRight: 0,
+        cropBottom: 0,
+        cropLeft: 0,
+        blendMode: "normal",
+      },
+      timeMap: [
+        {
+          id: createId(),
+          time: frameTime(0, sequence.format.frameRate),
+          value: 12,
+          interpolation: "hold",
+        },
+        {
+          id: createId(),
+          time: frameTime(24, sequence.format.frameRate),
+          value: 12,
+          interpolation: "hold",
+        },
+        {
+          id: createId(),
+          time: frameTime(48, sequence.format.frameRate),
+          value: 60,
+          interpolation: "linear",
+        },
+      ],
+      effects: [],
+      audio: { gainDb: 0, pan: 0, muted: false, channelMap: [] },
+      links: [],
+      semanticMetadata: {},
+    };
+    project.assets[asset.id] = asset;
+    track.items.push(clip);
+
+    const compiled = compileMltXml(project, undefined, {
+      availableCapabilities: new Set(["mlt.link.timeremap"]),
+    });
+
+    expect(compiled).toContain(`<chain id="producer_${clip.id}" out="47">`);
+    expect(compiled).toContain(`<link id="link_timeremap_${clip.id}">`);
+    expect(compiled).toContain(
+      '<property name="mlt_service">timeremap</property>',
+    );
+    expect(compiled).toContain(
+      '<property name="time_map">0|=0.5;24|=0.5;48=2.5</property>',
+    );
+    expect(compiled).toContain(
+      `<entry producer="producer_${clip.id}" in="0" out="47"/>`,
+    );
+
+    clip.timeMap = [
+      {
+        id: createId(),
+        time: frameTime(0, sequence.format.frameRate),
+        value: 60,
+        interpolation: "linear",
+      },
+      {
+        id: createId(),
+        time: frameTime(48, sequence.format.frameRate),
+        value: 12,
+        interpolation: "linear",
+      },
+    ];
+    const reversed = compileMltXml(project, undefined, {
+      availableCapabilities: new Set(["mlt.link.timeremap"]),
+    });
+    expect(reversed).toContain(
+      '<property name="time_map">0=2.458333;48=0.458333</property>',
+    );
+
+    clip.timeMap = [
+      {
+        id: createId(),
+        time: frameTime(0, sequence.format.frameRate),
+        value: 12,
+        interpolation: "linear",
+      },
+      {
+        id: createId(),
+        time: frameTime(24, sequence.format.frameRate),
+        value: 60,
+        interpolation: "linear",
+      },
+      {
+        id: createId(),
+        time: frameTime(48, sequence.format.frameRate),
+        value: 36,
+        interpolation: "linear",
+      },
+    ];
+    expect(() =>
+      compileMltXml(project, undefined, {
+        availableCapabilities: new Set(["mlt.link.timeremap"]),
+      }),
+    ).toThrow("Descending speed-ramp segments");
+  });
+
+  it("reports unavailable timeremap capability for retimed clips", () => {
+    const project = createProject({ name: "Retime unavailable" });
+    const sequence = project.sequences[project.settings.defaultSequenceId]!;
+    const track = sequence.tracks.find(
+      (candidate) => candidate.kind === "video",
+    )!;
+    const asset: Asset = {
+      id: createId(),
+      name: "Retime.mp4",
+      kind: "video",
+      uri: "C:\\media\\Retime.mp4",
+      hash: "0123456789abcdeffedcba9876543210",
+      managed: false,
+      streams: [],
+      duration: frameTime(100, sequence.format.frameRate),
+      proxies: [],
+      analysisRefs: [],
+      licenseMetadata: {},
+      semanticMetadata: {},
+    };
+    const clip: Clip = {
+      id: createId(),
+      name: "Retimed clip",
+      type: "clip",
+      assetId: asset.id,
+      sourceRange: {
+        start: frameTime(0, sequence.format.frameRate),
+        duration: frameTime(24, sequence.format.frameRate),
+      },
+      timelineRange: {
+        start: frameTime(0, sequence.format.frameRate),
+        duration: frameTime(24, sequence.format.frameRate),
+      },
+      enabled: true,
+      locked: false,
+      metadata: {},
+      transform: {
+        positionX: 0,
+        positionY: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        opacity: 1,
+        cropTop: 0,
+        cropRight: 0,
+        cropBottom: 0,
+        cropLeft: 0,
+        blendMode: "normal",
+      },
+      timeMap: [
+        {
+          id: createId(),
+          time: frameTime(0, sequence.format.frameRate),
+          value: 0,
+          interpolation: "linear",
+        },
+        {
+          id: createId(),
+          time: frameTime(24, sequence.format.frameRate),
+          value: 24,
+          interpolation: "linear",
+        },
+      ],
+      effects: [],
+      audio: { gainDb: 0, pan: 0, muted: false, channelMap: [] },
+      links: [],
+      semanticMetadata: {},
+    };
+    project.assets[asset.id] = asset;
+    track.items.push(clip);
+
+    expect(() => compileMltXml(project)).toThrow(FrameOSError);
+    expect(() => compileMltXml(project)).toThrow("mlt.link.timeremap");
   });
 
   it("resolves managed project URIs and refuses explicitly offline assets", () => {

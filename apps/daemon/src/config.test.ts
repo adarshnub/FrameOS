@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -64,8 +64,33 @@ describe("daemon configuration", () => {
       ].join(";"),
     });
     expect(config.analyzerManifestPaths).toEqual([
-      resolve("plugins/whisper.json"),
-      resolve("plugins/onnx.json"),
+      resolve(config.workspaceRoot!, "plugins/whisper.json"),
+      resolve(config.workspaceRoot!, "plugins/onnx.json"),
     ]);
+  });
+
+  it("loads FRAMEOS settings from dotenv without overriding process values", async () => {
+    const root = await dataDirectory();
+    const environmentPath = resolve(root, ".env");
+    await writeFile(
+      environmentPath,
+      [
+        `FRAMEOS_DATA_DIR=${resolve(root, "dotenv-data")}`,
+        "FRAMEOS_PORT=32001",
+        "FRAMEOS_OPENAI_MODEL=gpt-4.1-mini",
+        "UNRELATED_VALUE=ignored",
+      ].join("\n"),
+      "utf8",
+    );
+    const environment: NodeJS.ProcessEnv = {
+      FRAMEOS_ENV_FILE: environmentPath,
+      FRAMEOS_PORT: "32002",
+    };
+    const config = await loadConfig(environment);
+
+    expect(config.port).toBe(32_002);
+    expect(config.environmentFilePath).toBe(environmentPath);
+    expect(environment.FRAMEOS_OPENAI_MODEL).toBe("gpt-4.1-mini");
+    expect(environment.UNRELATED_VALUE).toBeUndefined();
   });
 });

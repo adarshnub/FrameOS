@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "1.0.0",
+  "suiteId": "frameos-agent-benchmarks-v1",
+  "description": "Versioned deterministic benchmark inventory for FrameOS agent-native editing.",
+  "acceptanceTargets": {
+    "deterministicLowLevelSuccessRate": 1,
+    "semanticTaskCompletionRate": 0.8,
+    "agentPolicyViolations": 0,
+    "requiresTraceability": true
+  },
+  "cases": [
+    {
+      "id": "micro.one_frame_trim",
+      "category": "micro",
+      "status": "implemented"
+    },
+    { "id": "micro.exact_split", "category": "micro", "status": "implemented" },
+    { "id": "micro.move_clip", "category": "micro", "status": "implemented" },
+    {
+      "id": "micro.gain_adjustment",
+      "category": "micro",
+      "status": "implemented"
+    },
+    {
+      "id": "micro.caption_correction",
+      "category": "micro",
+      "status": "implemented"
+    },
+    {
+      "id": "micro.keyframe_insertion",
+      "category": "micro",
+      "status": "implemented"
+    },
+    {
+      "id": "intermediate.ripple_delete_silences",
+      "category": "intermediate",
+      "status": "implemented"
+    },
+    {
+      "id": "intermediate.replace_broll",
+      "category": "intermediate",
+      "status": "implemented"
+    },
+    {
+      "id": "intermediate.convert_aspect_ratio",
+      "category": "intermediate",
+      "status": "implemented"
+    },
+    {
+      "id": "intermediate.sync_external_audio",
+      "category": "intermediate",
+      "status": "gated",
+      "gate": "audio waveform alignment analyzer"
+    },
+    {
+      "id": "intermediate.style_captions",
+      "category": "intermediate",
+      "status": "implemented"
+    },
+    {
+      "id": "intermediate.color_match_shots",
+      "category": "intermediate",
+      "status": "gated",
+      "gate": "color-match analyzer/adapter"
+    },
+    {
+      "id": "complex.podcast_short",
+      "category": "complex",
+      "status": "gated",
+      "gate": "multi-step benchmark orchestration"
+    },
+    {
+      "id": "complex.multicam_interview",
+      "category": "complex",
+      "status": "gated",
+      "gate": "multicam media fixture and conformance oracle"
+    },
+    {
+      "id": "complex.trailer_highlight",
+      "category": "complex",
+      "status": "implemented"
+    },
+    {
+      "id": "complex.music_synchronized_montage",
+      "category": "complex",
+      "status": "implemented"
+    },
+    {
+      "id": "complex.masked_tracked_overlay",
+      "category": "complex",
+      "status": "gated",
+      "gate": "tracking analyzer and visual oracle"
+    },
+    {
+      "id": "complex.nested_sequence_revision",
+      "category": "complex",
+      "status": "gated",
+      "gate": "nested-sequence benchmark oracle"
+    },
+    {
+      "id": "failure.missing_media",
+      "category": "failure",
+      "status": "implemented"
+    },
+    {
+      "id": "failure.unavailable_effect",
+      "category": "failure",
+      "status": "implemented"
+    },
+    {
+      "id": "failure.conflicting_revision",
+      "category": "failure",
+      "status": "implemented"
+    },
+    {
+      "id": "failure.insufficient_analysis",
+      "category": "failure",
+      "status": "implemented"
+    },
+    {
+      "id": "failure.ambiguous_request",
+      "category": "failure",
+      "status": "gated",
+      "gate": "provider-driven clarification benchmark"
+    },
+    {
+      "id": "failure.rejected_approval",
+      "category": "failure",
+      "status": "implemented"
+    }
+  ]
+}

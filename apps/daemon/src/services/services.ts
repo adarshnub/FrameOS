@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { DaemonConfig } from "../config.js";
 import { EngineWorkerClient } from "../engine/worker-client.js";
@@ -16,6 +17,7 @@ import { AssetService } from "../assets/asset-service.js";
 import { CaptionInterchangeService } from "../interchange/captions.js";
 import { loadExternalAnalyzerPlugins } from "../analysis/external-analyzer.js";
 import { SemanticService } from "../semantic/semantic-service.js";
+import { ObservabilityService } from "../observability/observability-service.js";
 
 export interface FrameOSServices {
   config: DaemonConfig;
@@ -32,6 +34,7 @@ export interface FrameOSServices {
   assets: AssetService;
   captions: CaptionInterchangeService;
   semantic: SemanticService;
+  observability: ObservabilityService;
   close(): Promise<void>;
 }
 
@@ -44,10 +47,20 @@ export async function createServices(
     resolve(config.dataDirectory, "runtime.sqlite"),
   );
   await database.initialize();
-  const mediaPolicy = new MediaPolicy(config.allowedMediaRoots);
+  const uploadStagingDirectory = resolve(config.dataDirectory, "uploads");
+  await mkdir(uploadStagingDirectory, { recursive: true });
+  const mediaPolicy = new MediaPolicy([
+    ...config.allowedMediaRoots,
+    uploadStagingDirectory,
+  ]);
   await mediaPolicy.initialize();
   const worker = new EngineWorkerClient(config.engineWorkerPath);
   const events = new EventBus();
+  const observability = new ObservabilityService(config.dataDirectory);
+  await observability.initialize();
+  const unsubscribeObservability = events.subscribe((event) =>
+    observability.recordEvent(event),
+  );
   const externalAnalyzers = await loadExternalAnalyzerPlugins(
     config.analyzerManifestPaths ?? [],
     mediaPolicy,
@@ -113,8 +126,11 @@ export async function createServices(
     assets,
     captions,
     semantic,
+    observability,
     async close() {
       await jobs.shutdown();
+      unsubscribeObservability();
+      await observability.close();
       database.close();
     },
   };

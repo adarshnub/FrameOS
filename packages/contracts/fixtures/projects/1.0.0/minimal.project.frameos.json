@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectId": "018f6f3a-1d3b-7000-8000-000000000001",
+  "revision": 0,
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "settings": {
+    "name": "1.0.0 migration fixture",
+    "defaultSequenceId": "018f6f3a-1d3b-7000-8000-000000000010",
+    "timeDisplay": "timecode"
+  },
+  "assets": {
+    "018f6f3a-1d3b-7000-8000-000000000020": {
+      "id": "018f6f3a-1d3b-7000-8000-000000000020",
+      "name": "fixture.mov",
+      "kind": "video",
+      "uri": "file:///fixtures/fixture.mov",
+      "hash": "0123456789abcdef0123456789abcdef",
+      "managed": false,
+      "streams": [],
+      "duration": {
+        "value": 300,
+        "rate": {
+          "numerator": 30,
+          "denominator": 1
+        }
+      },
+      "proxies": [],
+      "analysisRefs": [],
+      "licenseMetadata": {},
+      "semanticMetadata": {}
+    }
+  },
+  "sequences": {
+    "018f6f3a-1d3b-7000-8000-000000000010": {
+      "id": "018f6f3a-1d3b-7000-8000-000000000010",
+      "name": "Main",
+      "format": {
+        "width": 1920,
+        "height": 1080,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "sampleRate": 48000,
+        "channels": 2,
+        "pixelAspectRatio": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "colorSpace": "rec709"
+      },
+      "tracks": [
+        {
+          "id": "018f6f3a-1d3b-7000-8000-000000000030",
+          "name": "V1",
+          "kind": "video",
+          "order": 1,
+          "enabled": true,
+          "locked": false,
+          "muted": false,
+          "syncLocked": true,
+          "items": [
+            {
+              "id": "018f6f3a-1d3b-7000-8000-000000000040",
+              "type": "clip",
+              "name": "Fixture clip",
+              "assetId": "018f6f3a-1d3b-7000-8000-000000000020",
+              "sourceRange": {
+                "start": {
+                  "value": 0,
+                  "rate": {
+                    "numerator": 30,
+                    "denominator": 1
+                  }
+                },
+                "duration": {
+                  "value": 300,
+                  "rate": {
+                    "numerator": 30,
+                    "denominator": 1
+                  }
+                }
+              },
+              "timelineRange": {
+                "start": {
+                  "value": 0,
+                  "rate": {
+                    "numerator": 30,
+                    "denominator": 1
+                  }
+                },
+                "duration": {
+                  "value": 300,
+                  "rate": {
+                    "numerator": 30,
+                    "denominator": 1
+                  }
+                }
+              },
+              "enabled": true,
+              "locked": false,
+              "metadata": {},
+              "transform": {
+                "positionX": 0,
+                "positionY": 0,
+                "anchorX": 0.5,
+                "anchorY": 0.5,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "opacity": 1,
+                "cropTop": 0,
+                "cropRight": 0,
+                "cropBottom": 0,
+                "cropLeft": 0,
+                "blendMode": "normal"
+              },
+              "timeMap": [],
+              "effects": [],
+              "audio": {
+                "gainDb": 0,
+                "pan": 0,
+                "muted": false,
+                "channelMap": []
+              },
+              "links": [],
+              "semanticMetadata": {}
+            }
+          ],
+          "effects": [],
+          "metadata": {}
+        }
+      ],
+      "markers": [],
+      "captions": [],
+      "buses": [],
+      "outputEffects": [],
+      "metadata": {}
+    }
+  },
+  "analyses": {},
+  "renderProfiles": {},
+  "masks": {},
+  "trackedObjects": {},
+  "multicamGroups": {},
+  "itemGroups": {},
+  "metadata": {}
+}

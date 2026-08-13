@@ -179,6 +179,7 @@ const baselineServiceUnavailable: CapabilityDescriptor[] = [
   ["mlt.filter.crop", "filter", "LGPL-2.1-or-later"],
   ["mlt.filter.panner", "filter", "LGPL-2.1-or-later"],
   ["mlt.filter.qtext", "filter", "LGPL-2.1-or-later"],
+  ["mlt.link.timeremap", "link", "LGPL-2.1-or-later"],
   ["mlt.producer.avformat", "producer", "audit-required"],
   ["mlt.producer.avformat-novalidate", "producer", "audit-required"],
   ["mlt.producer.color", "producer", "LGPL-2.1-or-later"],

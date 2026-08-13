@@ -19,6 +19,8 @@ server.log.info(
     host: config.host,
     port: config.port,
     authTokenPath: config.authTokenPath,
+    environmentFilePath: config.environmentFilePath,
+    workspaceRoot: config.workspaceRoot,
     remoteMode: config.remoteMode,
   },
   "FrameOS daemon listening",

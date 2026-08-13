@@ -31,6 +31,16 @@ export interface PlanProviderRequest {
 export interface PlanProviderResult {
   plan: EditPlan;
   responseId?: string;
+  usage?: ProviderUsage;
+}
+
+export interface ProviderUsage {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd?: number;
+  pricingSource?: string;
 }
 
 export interface AgentProvider {
@@ -47,6 +57,63 @@ interface OpenAIResponse {
     content?: Array<{ type?: unknown; text?: unknown }>;
   }>;
   error?: { message?: unknown };
+  usage?: {
+    input_tokens?: unknown;
+    output_tokens?: unknown;
+    total_tokens?: unknown;
+    input_tokens_details?: { cached_tokens?: unknown };
+  };
+}
+
+const openAiPricesPerMillion: Record<
+  string,
+  { input: number; cachedInput: number; output: number }
+> = {
+  "gpt-4.1": { input: 2, cachedInput: 0.5, output: 8 },
+  "gpt-4.1-mini": { input: 0.4, cachedInput: 0.1, output: 1.6 },
+  "gpt-4.1-nano": { input: 0.1, cachedInput: 0.025, output: 0.4 },
+};
+
+function finiteTokenCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : 0;
+}
+
+export function calculateOpenAiUsage(
+  model: string,
+  response: OpenAIResponse,
+): ProviderUsage | undefined {
+  if (response.usage === undefined) return undefined;
+  const inputTokens = finiteTokenCount(response.usage.input_tokens);
+  const cachedInputTokens = Math.min(
+    inputTokens,
+    finiteTokenCount(response.usage.input_tokens_details?.cached_tokens),
+  );
+  const outputTokens = finiteTokenCount(response.usage.output_tokens);
+  const totalTokens =
+    finiteTokenCount(response.usage.total_tokens) || inputTokens + outputTokens;
+  const price = openAiPricesPerMillion[model];
+  const estimatedCostUsd =
+    price === undefined
+      ? undefined
+      : ((inputTokens - cachedInputTokens) * price.input +
+          cachedInputTokens * price.cachedInput +
+          outputTokens * price.output) /
+        1_000_000;
+  return {
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+    totalTokens,
+    ...(estimatedCostUsd === undefined ? {} : { estimatedCostUsd }),
+    ...(price === undefined
+      ? {}
+      : {
+          pricingSource:
+            "OpenAI public GPT-4.1 pricing (USD per 1M tokens, checked 2026-08-13)",
+        }),
+  };
 }
 
 const strictEditPlanJsonSchema = {
@@ -246,9 +313,11 @@ export class OpenAIResponsesProvider implements AgentProvider {
       const raw = JSON.parse(outputText(body)) as Record<string, unknown>;
       if (raw.clarificationQuestion === null) delete raw.clarificationQuestion;
       const plan = editPlanSchema.parse(raw);
+      const usage = calculateOpenAiUsage(this.model, body);
       return {
         plan,
         ...(typeof body.id === "string" ? { responseId: body.id } : {}),
+        ...(usage === undefined ? {} : { usage }),
       };
     } catch (error) {
       if (error instanceof FrameOSError) throw error;
@@ -279,14 +348,22 @@ export class ProviderRegistry {
   ): ProviderRegistry {
     const registry = new ProviderRegistry();
     const key = environment.FRAMEOS_OPENAI_API_KEY;
-    const model = environment.FRAMEOS_OPENAI_MODEL;
-    if (key !== undefined && model !== undefined) {
+    const configuredModels =
+      environment.FRAMEOS_OPENAI_MODELS ??
+      environment.FRAMEOS_OPENAI_MODEL ??
+      "gpt-4.1-mini";
+    if (key !== undefined) {
       const baseUrl = environment.FRAMEOS_OPENAI_BASE_URL;
-      registry.add(
-        baseUrl === undefined
-          ? new OpenAIResponsesProvider(model, key)
-          : new OpenAIResponsesProvider(model, key, baseUrl),
-      );
+      for (const model of configuredModels
+        .split(",")
+        .map((candidate) => candidate.trim())
+        .filter(Boolean)) {
+        registry.add(
+          baseUrl === undefined
+            ? new OpenAIResponsesProvider(model, key)
+            : new OpenAIResponsesProvider(model, key, baseUrl),
+        );
+      }
     }
     return registry;
   }

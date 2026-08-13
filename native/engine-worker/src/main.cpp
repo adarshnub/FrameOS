@@ -109,6 +109,7 @@ const std::set<std::string> baseline_services = {
     "filter:crop",
     "filter:panner",
     "filter:qtext",
+    "link:timeremap",
     "transition:luma",
     "transition:mix",
 };
@@ -120,6 +121,7 @@ const std::map<std::string, std::string> baseline_service_licenses = {
     {"filter:crop", "LGPL-2.1-or-later"},
     {"filter:panner", "LGPL-2.1-or-later"},
     {"filter:qtext", "LGPL-2.1-or-later"},
+    {"link:timeremap", "LGPL-2.1-or-later"},
     {"transition:luma", "LGPL-2.1-or-later"},
     {"transition:mix", "LGPL-2.1-or-later"},
 };
@@ -304,6 +306,7 @@ void write_capabilities() {
         {"producer", mlt_service_producer_type, mlt_repository_producers},
         {"consumer", mlt_service_consumer_type, mlt_repository_consumers},
         {"filter", mlt_service_filter_type, mlt_repository_filters},
+        {"link", mlt_service_link_type, mlt_repository_links},
         {"transition", mlt_service_transition_type, mlt_repository_transitions},
     };
     std::set<std::string> discovered_services;

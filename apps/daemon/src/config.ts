@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { parseEnv } from "node:util";
 
 export const bearerTokenScopes = [
   "project:read",
@@ -32,6 +33,65 @@ export interface DaemonConfig {
   engineWorkerPath?: string;
   analyzerManifestPaths?: string[];
   scopedTokens?: ScopedBearerToken[];
+  environmentFilePath?: string;
+  workspaceRoot?: string;
+}
+
+async function findWorkspaceRoot(
+  environment: NodeJS.ProcessEnv,
+): Promise<string> {
+  const configuredRoot = environment.FRAMEOS_WORKSPACE_ROOT?.trim();
+  if (configuredRoot !== undefined && configuredRoot.length > 0) {
+    return resolve(configuredRoot);
+  }
+  let candidate = resolve(environment.INIT_CWD ?? process.cwd());
+  for (let depth = 0; depth < 12; depth += 1) {
+    try {
+      const manifest = JSON.parse(
+        await readFile(resolve(candidate, "package.json"), "utf8"),
+      ) as { name?: unknown; workspaces?: unknown };
+      if (manifest.name === "frameos" && Array.isArray(manifest.workspaces)) {
+        return candidate;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        // Invalid or unrelated package manifests are skipped while walking up.
+      }
+    }
+    const parent = dirname(candidate);
+    if (parent === candidate) break;
+    candidate = parent;
+  }
+  return resolve(environment.INIT_CWD ?? process.cwd());
+}
+
+async function loadEnvironmentFile(
+  environment: NodeJS.ProcessEnv,
+  workspaceRoot: string,
+): Promise<string | undefined> {
+  const explicitPath = environment.FRAMEOS_ENV_FILE?.trim() || undefined;
+  if (environment !== process.env && explicitPath === undefined)
+    return undefined;
+  const environmentFilePath = resolve(workspaceRoot, explicitPath ?? ".env");
+  let contents: string;
+  try {
+    contents = await readFile(environmentFilePath, "utf8");
+  } catch (error) {
+    if (
+      (error as NodeJS.ErrnoException).code === "ENOENT" &&
+      explicitPath === undefined
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+  const parsed = parseEnv(contents);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key.startsWith("FRAMEOS_") && environment[key] === undefined) {
+      environment[key] = value;
+    }
+  }
+  return environmentFilePath;
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -147,7 +207,13 @@ async function loadOrCreateToken(
 export async function loadConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<DaemonConfig> {
+  const workspaceRoot = await findWorkspaceRoot(environment);
+  const environmentFilePath = await loadEnvironmentFile(
+    environment,
+    workspaceRoot,
+  );
   const dataDirectory = resolve(
+    workspaceRoot,
     environment.FRAMEOS_DATA_DIR ?? ".frameos-data",
   );
   await mkdir(dataDirectory, { recursive: true });
@@ -157,8 +223,17 @@ export async function loadConfig(
     throw new Error("FRAMEOS_HOST must be localhost or a literal IP address");
   }
 
-  const tlsCertificatePath = environment.FRAMEOS_TLS_CERT?.trim() || undefined;
-  const tlsKeyPath = environment.FRAMEOS_TLS_KEY?.trim() || undefined;
+  const configuredTlsCertificatePath =
+    environment.FRAMEOS_TLS_CERT?.trim() || undefined;
+  const configuredTlsKeyPath = environment.FRAMEOS_TLS_KEY?.trim() || undefined;
+  const tlsCertificatePath =
+    configuredTlsCertificatePath === undefined
+      ? undefined
+      : resolve(workspaceRoot, configuredTlsCertificatePath);
+  const tlsKeyPath =
+    configuredTlsKeyPath === undefined
+      ? undefined
+      : resolve(workspaceRoot, configuredTlsKeyPath);
   if (
     remoteMode &&
     (tlsCertificatePath === undefined || tlsKeyPath === undefined)
@@ -180,14 +255,16 @@ export async function loadConfig(
   );
   const configuredRoots = environment.FRAMEOS_MEDIA_ROOTS?.split(";").filter(
     Boolean,
-  ) ?? [process.cwd()];
-  const allowedMediaRoots = configuredRoots.map((root) => resolve(root));
+  ) ?? [workspaceRoot];
+  const allowedMediaRoots = configuredRoots.map((root) =>
+    resolve(workspaceRoot, root),
+  );
   const analyzerManifestPaths = (
     environment.FRAMEOS_ANALYZER_MANIFESTS?.split(";") ?? []
   )
     .map((path) => path.trim())
     .filter(Boolean)
-    .map((path) => resolve(path));
+    .map((path) => resolve(workspaceRoot, path));
   if (analyzerManifestPaths.length > 64) {
     throw new Error("FRAMEOS_ANALYZER_MANIFESTS is limited to 64 manifests");
   }
@@ -200,11 +277,18 @@ export async function loadConfig(
     authTokenPath: tokenPath,
     allowedMediaRoots,
     remoteMode,
+    workspaceRoot,
+    ...(environmentFilePath === undefined ? {} : { environmentFilePath }),
     ...(tlsCertificatePath === undefined ? {} : { tlsCertificatePath }),
     ...(tlsKeyPath === undefined ? {} : { tlsKeyPath }),
     ...(environment.FRAMEOS_ENGINE_WORKER === undefined
       ? {}
-      : { engineWorkerPath: resolve(environment.FRAMEOS_ENGINE_WORKER) }),
+      : {
+          engineWorkerPath: resolve(
+            workspaceRoot,
+            environment.FRAMEOS_ENGINE_WORKER,
+          ),
+        }),
     ...(analyzerManifestPaths.length === 0 ? {} : { analyzerManifestPaths }),
     ...(scopedTokens.length === 0 ? {} : { scopedTokens }),
   };

@@ -1,10 +1,12 @@
 # Development and verification
 
-Requirements for the control plane are Node.js 24+ and npm 11+. The native stub requires CMake 3.24+ and a C++20 compiler. An MLT-enabled build additionally requires MLT/MLT++ 7.40 development packages discoverable as `mlt++-7` through pkg-config.
+Requirements for the control plane are Node.js 24+ and npm 11+. Python 3.11+ is required for generated Python SDK validation. The native stub requires CMake 3.24+ and a C++20 compiler. An MLT-enabled build additionally requires MLT/MLT++ 7.40 development packages discoverable as `mlt++-7` through pkg-config.
 
 ```powershell
 npm install
 npm run check
+npm run bench:agent
+npm run sdk:python:check
 npm run build
 
 cmake -S native/engine-worker -B build/engine-worker -DFRAMEOS_WITH_MLT=OFF
@@ -26,6 +28,13 @@ Important environment variables:
 - `FRAMEOS_SCOPED_TOKENS`, required outside loopback; JSON entries contain `id`, `token`, and least-privilege `scopes`
 - `FRAMEOS_ENGINE_WORKER`
 - `FRAMEOS_ANALYZER_MANIFESTS` as semicolon-separated, explicitly trusted analyzer manifest paths; see `docs/analyzer-plugins.md`
-- `FRAMEOS_OPENAI_API_KEY`, `FRAMEOS_OPENAI_MODEL`, and optional `FRAMEOS_OPENAI_BASE_URL`
+- `FRAMEOS_OPENAI_API_KEY`; `FRAMEOS_OPENAI_MODEL` defaults to `gpt-4.1-mini`
+- `FRAMEOS_OPENAI_MODELS` for a comma-separated set of models selectable in the control room; optional `FRAMEOS_OPENAI_BASE_URL`
+- `FRAMEOS_ENV_FILE` to load a dotenv file other than the repository-root `.env`
+- `FRAMEOS_WORKSPACE_ROOT` to override automatic repository-root discovery
+
+The daemon automatically loads `FRAMEOS_*` values from `.env` in its working directory. Already-defined shell or process variables take precedence, and unrelated dotenv keys are ignored. The browser never receives provider credentials. Restart the daemon after changing provider configuration. The admin control room is served at `/inspector`; the public landing page is served at `/`.
+
+Structured log records are appended to `<FRAMEOS_DATA_DIR>/logs/frameos.ndjson`. Values under secret-like keys are recursively redacted before they enter memory, the live stream, or disk. The provider cost ledger is stored in `runtime.sqlite`; listed dollar amounts are estimates based on the locally recorded pricing table and should be reconciled with the provider invoice.
 
 Never commit `.frameos-data`, provider credentials, media files, render outputs, or unreviewed native binaries.

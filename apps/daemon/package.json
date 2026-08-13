@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/websocket": "^11.3.0",
     "@frameos/contracts": "0.1.0",

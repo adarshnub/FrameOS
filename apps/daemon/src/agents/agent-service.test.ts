@@ -44,6 +44,14 @@ describe("agent service", () => {
       async createPlan(input) {
         return {
           responseId: "fixture-response",
+          usage: {
+            inputTokens: 1_000,
+            cachedInputTokens: 250,
+            outputTokens: 100,
+            totalTokens: 1_100,
+            estimatedCostUsd: 0.00044,
+            pricingSource: "test pricing",
+          },
           plan: {
             goal: input.request,
             summary: "Trim one frame after validating timeline boundaries.",
@@ -87,6 +95,77 @@ describe("agent service", () => {
     expect(agents.getRun(run.id).plan?.steps[0]?.operationFamilies).toEqual([
       "editorial",
     ]);
+    expect(
+      services.database.summarizeProviderUsage({ sessionId: session.id }),
+    ).toMatchObject({
+      requests: 1,
+      inputTokens: 1_000,
+      cachedInputTokens: 250,
+      outputTokens: 100,
+      estimatedCostUsd: 0.00044,
+    });
+  });
+
+  it("records incurred usage and stops a run that exceeds its provider budget", async () => {
+    const project = await services.projects.create(
+      createProject({ name: "Cost limited planning" }),
+    );
+    const registry = new ProviderRegistry();
+    registry.add({
+      kind: "local",
+      model: "priced-model",
+      async createPlan(input) {
+        return {
+          usage: {
+            inputTokens: 2_000,
+            cachedInputTokens: 0,
+            outputTokens: 200,
+            totalTokens: 2_200,
+            estimatedCostUsd: 0.02,
+            pricingSource: "test pricing",
+          },
+          plan: {
+            goal: input.request,
+            summary: "A plan that exceeds the configured test budget.",
+            assumptions: [],
+            clarificationRequired: false,
+            steps: [
+              {
+                id: "metadata",
+                description: "Set metadata.",
+                operationFamilies: ["project"],
+                expectedAffectedRanges: [],
+                verification: ["timeline_invariants"],
+              },
+            ],
+            warnings: [],
+          },
+        };
+      },
+    });
+    const agents = new AgentService(
+      services.database,
+      services.projects,
+      services.capabilities,
+      registry,
+      services.events,
+      services.transactions,
+      services.analysis,
+      services.jobs,
+    );
+    const session = await agents.createSession({
+      projectId: project.projectId,
+      provider: "local",
+      model: "priced-model",
+      budgets: { maxProviderCostUsd: 0.01 },
+    });
+
+    await expect(agents.plan(session.id, "Set metadata")).rejects.toMatchObject(
+      { code: "RESOURCE_LIMIT" },
+    );
+    expect(
+      services.database.summarizeProviderUsage({ sessionId: session.id }),
+    ).toMatchObject({ requests: 1, estimatedCostUsd: 0.02 });
   });
 
   it("keeps supervised edits in a draft until an explicit approval commits them", async () => {

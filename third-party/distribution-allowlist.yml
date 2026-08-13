@@ -45,6 +45,8 @@ mlt:
       - crop
       - panner
       - qtext
+    link:
+      - timeremap
     transition:
       - luma
       - mix

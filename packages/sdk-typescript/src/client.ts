@@ -31,12 +31,14 @@ import type {
   Project,
   PreviewRequest,
   SemanticAddDynamicCaptionsRequest,
+  SemanticCreateHighlightRequest,
   SemanticEditPlan,
   SemanticFindRequest,
   SemanticFindResult,
   SemanticMakeVerticalRequest,
   SemanticMatchCutsToMusicRequest,
   SemanticRemoveSilencesRequest,
+  SemanticSyncBrollRequest,
   TransactionRequest,
   TransactionResult,
 } from "@frameos/contracts";
@@ -54,6 +56,50 @@ export interface CreateAgentSessionInput {
   approvalMode?: ApprovalMode;
   budgets?: Partial<AgentBudget>;
   allowedOperationFamilies?: string[];
+}
+
+export interface AdminLogEntry {
+  id: string;
+  occurredAt: string;
+  level: "debug" | "info" | "success" | "warn" | "error";
+  category: string;
+  eventType: string;
+  message: string;
+  projectId?: string;
+  correlationId?: string;
+  durationMs?: number;
+  data: unknown;
+}
+
+export interface ProviderUsageRecord {
+  id: string;
+  sessionId: string;
+  runId: string;
+  projectId: string;
+  provider: AgentProviderKind;
+  model: string;
+  operation: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd?: number;
+  pricingSource?: string;
+  providerResponseId?: string;
+  createdAt: string;
+}
+
+export interface ProviderUsageLedger {
+  summary: {
+    requests: number;
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCostUsd: number;
+    unpricedRequests: number;
+  };
+  records: ProviderUsageRecord[];
 }
 
 export class FrameOSApiError extends Error {
@@ -168,6 +214,37 @@ export class FrameOSClient {
     return this.request("GET", `/api/v1/capabilities${query}`);
   }
 
+  public listAdminLogs(
+    input: {
+      level?: AdminLogEntry["level"];
+      category?: string;
+      projectId?: string;
+      search?: string;
+      limit?: number;
+    } = {},
+  ): Promise<AdminLogEntry[]> {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== undefined) query.set(key, String(value));
+    }
+    const suffix = query.size === 0 ? "" : `?${query.toString()}`;
+    return this.request("GET", `/api/v1/admin/logs${suffix}`);
+  }
+
+  public getAdminProviderUsage(
+    input: {
+      projectId?: string;
+      sessionId?: string;
+    } = {},
+  ): Promise<ProviderUsageLedger> {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== undefined) query.set(key, value);
+    }
+    const suffix = query.size === 0 ? "" : `?${query.toString()}`;
+    return this.request("GET", `/api/v1/admin/usage${suffix}`);
+  }
+
   public listAnalyzers(): Promise<AnalyzerDescriptor[]> {
     return this.request("GET", "/api/v1/analysis/analyzers");
   }
@@ -254,6 +331,22 @@ export class FrameOSClient {
       "/api/v1/semantic/add-dynamic-captions/plan",
       input,
     );
+  }
+
+  public planCreateHighlight(
+    input: SemanticCreateHighlightRequest,
+  ): Promise<SemanticEditPlan> {
+    return this.request(
+      "POST",
+      "/api/v1/semantic/create-highlight/plan",
+      input,
+    );
+  }
+
+  public planSyncBroll(
+    input: SemanticSyncBrollRequest,
+  ): Promise<SemanticEditPlan> {
+    return this.request("POST", "/api/v1/semantic/sync-broll/plan", input);
   }
 
   public getJob(jobId: string): Promise<JobRecord> {

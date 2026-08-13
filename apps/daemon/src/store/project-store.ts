@@ -17,6 +17,7 @@ import {
   FrameOSError,
   createId,
   isEntityId,
+  migrateProjectDocument,
   projectSchema,
   transactionRequestSchema,
   transactionResultSchema,
@@ -181,7 +182,7 @@ export class ProjectStore {
     }
 
     const projectPath = resolve(directory, "project.frameos.json");
-    const current = projectSchema.parse(
+    const current = migrateProjectDocument(
       parseJson<unknown>(await readFile(projectPath, "utf8"), "project"),
     );
     if (current.revision === pending.request.baseRevision) {
@@ -195,7 +196,7 @@ export class ProjectStore {
           ),
           "utf8",
         );
-        const recovered = projectSchema.parse(
+        const recovered = migrateProjectDocument(
           parseJson<unknown>(revisionRaw, "pending revision"),
         );
         if (
@@ -217,7 +218,7 @@ export class ProjectStore {
         throw error;
       }
     }
-    const recoveredCurrent = projectSchema.parse(
+    const recoveredCurrent = migrateProjectDocument(
       parseJson<unknown>(await readFile(projectPath, "utf8"), "project"),
     );
     if (recoveredCurrent.revision !== pending.result.resultingRevision) {
@@ -248,7 +249,7 @@ export class ProjectStore {
         resolve(directory, "project.frameos.json"),
         "utf8",
       );
-      return projectSchema.parse(parseJson<unknown>(raw, "project"));
+      return migrateProjectDocument(parseJson<unknown>(raw, "project"));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         throw new FrameOSError(
@@ -282,7 +283,7 @@ export class ProjectStore {
         ),
         "utf8",
       );
-      return projectSchema.parse(parseJson<unknown>(raw, "revision"));
+      return migrateProjectDocument(parseJson<unknown>(raw, "revision"));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         throw new FrameOSError(

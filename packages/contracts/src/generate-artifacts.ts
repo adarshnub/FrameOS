@@ -55,12 +55,14 @@ import { assetSchema, projectSchema } from "./project.js";
 import { previewArtifactSchema, previewRequestSchema } from "./previews.js";
 import {
   semanticAddDynamicCaptionsRequestSchema,
+  semanticCreateHighlightRequestSchema,
   semanticEditPlanSchema,
   semanticFindRequestSchema,
   semanticFindResultSchema,
   semanticMakeVerticalRequestSchema,
   semanticMatchCutsToMusicRequestSchema,
   semanticRemoveSilencesRequestSchema,
+  semanticSyncBrollRequestSchema,
 } from "./semantic.js";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -69,14 +71,34 @@ const checking = process.argv.includes("--check");
 async function emit(relativePath: string, value: unknown): Promise<void> {
   const path = resolve(packageRoot, relativePath);
   const contents = `${JSON.stringify(value, null, 2)}\n`;
+  await emitTextAt(path, contents, relativePath);
+}
+
+async function emitTextAt(
+  path: string,
+  contents: string,
+  label: string,
+): Promise<void> {
   if (checking) {
     const current = await readFile(path, "utf8").catch(() => undefined);
     if (current !== contents)
-      throw new Error(`${relativePath} is stale; run npm run artifacts`);
+      throw new Error(`${label} is stale; run npm run artifacts`);
     return;
   }
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, contents, "utf8");
+}
+
+async function emitWorkspaceText(
+  relativePath: string,
+  contents: string,
+): Promise<void> {
+  const workspaceRoot = resolve(packageRoot, "..", "..");
+  await emitTextAt(
+    resolve(workspaceRoot, relativePath),
+    contents,
+    relativePath,
+  );
 }
 
 function jsonSchema(schema: z.ZodType, id: string): Record<string, unknown> {
@@ -153,6 +175,14 @@ const semanticMatchCutsToMusicRequestJsonSchema = jsonSchema(
 const semanticAddDynamicCaptionsRequestJsonSchema = jsonSchema(
   semanticAddDynamicCaptionsRequestSchema,
   "https://frameos.dev/schema/v1/semantic-add-dynamic-captions-request.json",
+);
+const semanticCreateHighlightRequestJsonSchema = jsonSchema(
+  semanticCreateHighlightRequestSchema,
+  "https://frameos.dev/schema/v1/semantic-create-highlight-request.json",
+);
+const semanticSyncBrollRequestJsonSchema = jsonSchema(
+  semanticSyncBrollRequestSchema,
+  "https://frameos.dev/schema/v1/semantic-sync-broll-request.json",
 );
 const semanticEditPlanJsonSchema = jsonSchema(
   semanticEditPlanSchema,
@@ -433,6 +463,54 @@ const openapi = {
           "403": { description: "Source is outside approved media roots" },
           "409": { description: "Revision conflict" },
           "422": { description: "Unsupported source or invalid request" },
+        },
+      },
+    },
+    "/api/v1/assets/uploads": {
+      post: {
+        operationId: "uploadManagedAsset",
+        security: bearerSecurity,
+        parameters: [
+          {
+            name: "projectId",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "baseRevision",
+            in: "query",
+            required: true,
+            schema: { type: "integer", minimum: 0 },
+          },
+          {
+            name: "kind",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: ["video", "audio", "image", "subtitle", "font"],
+            },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                required: ["file"],
+                properties: {
+                  file: { type: "string", format: "binary" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Uploaded file stored as a managed asset" },
+          "409": { description: "Revision conflict" },
+          "413": { description: "Upload exceeds the configured limit" },
+          "422": { description: "Unsupported or missing media file" },
         },
       },
     },
@@ -739,6 +817,68 @@ const openapi = {
         },
       },
     },
+    "/api/v1/semantic/create-highlight/plan": {
+      post: {
+        operationId: "planSemanticCreateHighlight",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/SemanticCreateHighlightRequest",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Non-mutating highlight assembly plan derived from ranked analysis artifacts",
+            content: {
+              "application/json": {
+                schema: envelope({
+                  $ref: "#/components/schemas/SemanticEditPlan",
+                }),
+              },
+            },
+          },
+          "409": { description: "Revision conflict" },
+          "413": { description: "Operation budget exceeded" },
+        },
+      },
+    },
+    "/api/v1/semantic/sync-broll/plan": {
+      post: {
+        operationId: "planSemanticSyncBroll",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/SemanticSyncBrollRequest",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Non-mutating B-roll overlay plan derived from target and source analysis artifacts",
+            content: {
+              "application/json": {
+                schema: envelope({
+                  $ref: "#/components/schemas/SemanticEditPlan",
+                }),
+              },
+            },
+          },
+          "409": { description: "Revision conflict" },
+          "413": { description: "Operation budget exceeded" },
+        },
+      },
+    },
     "/api/v1/projects/{projectId}/revisions/{revision}": {
       get: {
         operationId: "getProjectRevision",
@@ -1028,6 +1168,51 @@ const openapi = {
         operationId: "listAgentProviders",
         security: bearerSecurity,
         responses: { "200": { description: "Configured providers" } },
+      },
+    },
+    "/api/v1/admin/logs": {
+      get: {
+        operationId: "listAdminLogs",
+        security: bearerSecurity,
+        parameters: [
+          { name: "level", in: "query", schema: { type: "string" } },
+          { name: "category", in: "query", schema: { type: "string" } },
+          {
+            name: "projectId",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
+          { name: "search", in: "query", schema: { type: "string" } },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 2000 },
+          },
+        ],
+        responses: {
+          "200": { description: "Redacted structured daemon logs" },
+        },
+      },
+    },
+    "/api/v1/admin/usage": {
+      get: {
+        operationId: "getAdminProviderUsage",
+        security: bearerSecurity,
+        parameters: [
+          {
+            name: "projectId",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "sessionId",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          "200": { description: "Provider token and estimated-cost ledger" },
+        },
       },
     },
     "/api/v1/agents/sessions": {
@@ -1389,6 +1574,8 @@ const openapi = {
         semanticMatchCutsToMusicRequestJsonSchema,
       SemanticAddDynamicCaptionsRequest:
         semanticAddDynamicCaptionsRequestJsonSchema,
+      SemanticCreateHighlightRequest: semanticCreateHighlightRequestJsonSchema,
+      SemanticSyncBrollRequest: semanticSyncBrollRequestJsonSchema,
       SemanticEditPlan: semanticEditPlanJsonSchema,
       Job: jobRecordJsonSchema,
       PreviewRequest: previewRequestJsonSchema,
@@ -1493,6 +1680,8 @@ const mcpManifest = {
     "semantic.make_vertical.plan",
     "semantic.match_cuts_to_music.plan",
     "semantic.add_dynamic_captions.plan",
+    "semantic.create_highlight.plan",
+    "semantic.sync_broll.plan",
     "transaction.create",
     "transaction.apply",
     "transaction.validate",
@@ -1517,6 +1706,293 @@ const mcpManifest = {
   ],
   operationResources: Object.keys(executableOperationSchemas).sort(),
 };
+
+const pythonClientMethods = [
+  {
+    name: "list_projects",
+    method: "GET",
+    path: "/api/v1/projects",
+    args: "",
+    body: "None",
+  },
+  {
+    name: "create_project",
+    method: "POST",
+    path: "/api/v1/projects",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "get_project",
+    method: "GET",
+    path: "/api/v1/projects/{project_id}",
+    args: "project_id: str",
+    body: "None",
+  },
+  {
+    name: "get_project_revision",
+    method: "GET",
+    path: "/api/v1/projects/{project_id}/revisions/{revision}",
+    args: "project_id: str, revision: int",
+    body: "None",
+  },
+  {
+    name: "execute_transaction",
+    method: "POST",
+    path: "/api/v1/transactions",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "import_otio",
+    method: "POST",
+    path: "/api/v1/imports/otio",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "export_otio",
+    method: "POST",
+    path: "/api/v1/exports/otio",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "import_captions",
+    method: "POST",
+    path: "/api/v1/imports/captions",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "export_captions",
+    method: "POST",
+    path: "/api/v1/exports/captions",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "list_capabilities",
+    method: "GET",
+    path: "/api/v1/capabilities",
+    args: "search: str | None = None",
+    body: "None",
+    query: "{'search': search} if search is not None else None",
+  },
+  {
+    name: "list_admin_logs",
+    method: "GET",
+    path: "/api/v1/admin/logs",
+    args: "level: str | None = None, category: str | None = None, project_id: str | None = None, search: str | None = None, limit: int | None = None",
+    body: "None",
+    query:
+      "{key: value for key, value in {'level': level, 'category': category, 'projectId': project_id, 'search': search, 'limit': limit}.items() if value is not None}",
+  },
+  {
+    name: "get_admin_provider_usage",
+    method: "GET",
+    path: "/api/v1/admin/usage",
+    args: "project_id: str | None = None, session_id: str | None = None",
+    body: "None",
+    query:
+      "{key: value for key, value in {'projectId': project_id, 'sessionId': session_id}.items() if value is not None}",
+  },
+  {
+    name: "list_analyzers",
+    method: "GET",
+    path: "/api/v1/analysis/analyzers",
+    args: "",
+    body: "None",
+  },
+  {
+    name: "import_asset",
+    method: "POST",
+    path: "/api/v1/assets/imports",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "create_asset_proxy",
+    method: "POST",
+    path: "/api/v1/projects/{project_id}/assets/{asset_id}/proxies",
+    args: "project_id: str, asset_id: str, input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "create_asset_thumbnail",
+    method: "POST",
+    path: "/api/v1/projects/{project_id}/assets/{asset_id}/thumbnails",
+    args: "project_id: str, asset_id: str, input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "analyze_asset",
+    method: "POST",
+    path: "/api/v1/projects/{project_id}/assets/{asset_id}/analysis",
+    args: "project_id: str, asset_id: str, input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "list_asset_analysis",
+    method: "GET",
+    path: "/api/v1/projects/{project_id}/assets/{asset_id}/analysis",
+    args: "project_id: str, asset_id: str",
+    body: "None",
+  },
+  {
+    name: "search_analysis",
+    method: "POST",
+    path: "/api/v1/assets/search",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "find_semantic_ranges",
+    method: "POST",
+    path: "/api/v1/semantic/find",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "plan_silence_removal",
+    method: "POST",
+    path: "/api/v1/semantic/remove-silences/plan",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "plan_vertical_conversion",
+    method: "POST",
+    path: "/api/v1/semantic/make-vertical/plan",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "plan_cuts_to_music",
+    method: "POST",
+    path: "/api/v1/semantic/match-cuts-to-music/plan",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "plan_dynamic_captions",
+    method: "POST",
+    path: "/api/v1/semantic/add-dynamic-captions/plan",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "plan_create_highlight",
+    method: "POST",
+    path: "/api/v1/semantic/create-highlight/plan",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "plan_sync_broll",
+    method: "POST",
+    path: "/api/v1/semantic/sync-broll/plan",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "get_job",
+    method: "GET",
+    path: "/api/v1/jobs/{job_id}",
+    args: "job_id: str",
+    body: "None",
+  },
+  {
+    name: "start_preview",
+    method: "POST",
+    path: "/api/v1/previews",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "cancel_job",
+    method: "DELETE",
+    path: "/api/v1/jobs/{job_id}",
+    args: "job_id: str",
+    body: "None",
+  },
+  {
+    name: "create_agent_session",
+    method: "POST",
+    path: "/api/v1/agents/sessions",
+    args: "input: JsonObject",
+    body: "input",
+  },
+  {
+    name: "plan_edit",
+    method: "POST",
+    path: "/api/v1/agents/runs",
+    args: "session_id: str, request: str",
+    body: "{'sessionId': session_id, 'request': request}",
+  },
+  {
+    name: "execute_agent_run",
+    method: "POST",
+    path: "/api/v1/agents/runs/{run_id}/execute",
+    args: "run_id: str, operations: JsonArray",
+    body: "{'operations': operations}",
+  },
+  {
+    name: "evaluate_agent_run",
+    method: "POST",
+    path: "/api/v1/agents/runs/{run_id}/evaluate",
+    args: "run_id: str",
+    body: "None",
+  },
+  {
+    name: "list_agent_evaluations",
+    method: "GET",
+    path: "/api/v1/agents/runs/{run_id}/evaluations",
+    args: "run_id: str",
+    body: "None",
+  },
+  {
+    name: "revise_agent_run",
+    method: "POST",
+    path: "/api/v1/agents/runs/{run_id}/revise",
+    args: "run_id: str, operations: JsonArray",
+    body: "{'operations': operations}",
+  },
+  {
+    name: "list_approvals",
+    method: "GET",
+    path: "/api/v1/approvals",
+    args: "project_id: str | None = None, status: str | None = None",
+    body: "None",
+    query:
+      "{key: value for key, value in {'projectId': project_id, 'status': status}.items() if value is not None}",
+  },
+  {
+    name: "decide_approval",
+    method: "POST",
+    path: "/api/v1/approvals/{approval_id}/decision",
+    args: "approval_id: str, decision: JsonObject",
+    body: "decision",
+  },
+] as const;
+
+function pythonFormatPath(path: string): string {
+  return path.replace(
+    /\{([A-Za-z_][A-Za-z0-9_]*)\}/gu,
+    (_, name: string) => `{quote(str(${name}))}`,
+  );
+}
+
+function pythonSdkClient(): string {
+  const methods = pythonClientMethods
+    .map((method) => {
+      const args = method.args === "" ? "" : `, ${method.args}`;
+      const query = "query" in method ? method.query : "None";
+      return `    def ${method.name}(self${args}) -> JsonValue:\n        return self._request("${method.method}", f"${pythonFormatPath(method.path)}", body=${method.body}, query=${query})\n`;
+    })
+    .join("\n");
+  return `# Generated from packages/contracts/openapi/frameos.openapi.json. Do not edit by hand.\nfrom __future__ import annotations\n\nimport json\nfrom typing import Any\nfrom urllib.error import HTTPError\nfrom urllib.parse import quote, urlencode\nfrom urllib.request import Request, urlopen\n\nJsonObject = dict[str, Any]\nJsonArray = list[Any]\nJsonValue = JsonObject | JsonArray | str | int | float | bool | None\n\n\nclass FrameOSApiError(Exception):\n    def __init__(self, code: str, message: str, status: int, details: JsonArray | None = None) -> None:\n        super().__init__(message)\n        self.code = code\n        self.status = status\n        self.details = details\n\n\nclass FrameOSClient:\n    def __init__(self, base_url: str, token: str) -> None:\n        self.base_url = base_url.rstrip("/")\n        self.token = token\n\n    def _request(self, method: str, path: str, body: JsonValue = None, query: JsonObject | None = None) -> JsonValue:\n        if query:\n            path = f"{path}?{urlencode(query)}"\n        payload = None if body is None else json.dumps(body).encode("utf-8")\n        request = Request(\n            f"{self.base_url}{path}",\n            data=payload,\n            method=method,\n            headers={\n                "Authorization": f"Bearer {self.token}",\n                "Accept": "application/json",\n                **({} if body is None else {"Content-Type": "application/json"}),\n            },\n        )\n        try:\n            with urlopen(request) as response:\n                envelope = json.loads(response.read().decode("utf-8"))\n                status = response.status\n        except HTTPError as error:\n            status = error.code\n            try:\n                envelope = json.loads(error.read().decode("utf-8"))\n            except Exception as exc:  # pragma: no cover - transport fallback\n                raise FrameOSApiError(f"HTTP_{status}", str(error), status) from exc\n        api_error = envelope.get("error")\n        data = envelope.get("data")\n        if api_error is not None or data is None:\n            api_error = api_error or {"code": f"HTTP_{status}", "message": "Empty API response"}\n            raise FrameOSApiError(api_error.get("code", "UNKNOWN"), api_error.get("message", "Unknown API error"), status, api_error.get("details"))\n        return data\n\n${methods}    def download_job_artifact(self, job_id: str, artifact_name: str) -> bytes:\n        path = f"/api/v1/jobs/{quote(str(job_id))}/artifacts/{quote(str(artifact_name))}"\n        request = Request(\n            f"{self.base_url}{path}",\n            method="GET",\n            headers={"Authorization": f"Bearer {self.token}", "Accept": "*/*"},\n        )\n        with urlopen(request) as response:\n            return response.read()\n`;
+}
 
 await Promise.all([
   emit("schema/frameos-project.schema.json", projectJsonSchema),
@@ -1567,6 +2043,14 @@ await Promise.all([
   emit(
     "schema/semantic-add-dynamic-captions-request.schema.json",
     semanticAddDynamicCaptionsRequestJsonSchema,
+  ),
+  emit(
+    "schema/semantic-create-highlight-request.schema.json",
+    semanticCreateHighlightRequestJsonSchema,
+  ),
+  emit(
+    "schema/semantic-sync-broll-request.schema.json",
+    semanticSyncBrollRequestJsonSchema,
   ),
   emit("schema/semantic-edit-plan.schema.json", semanticEditPlanJsonSchema),
   emit("schema/job.schema.json", jobRecordJsonSchema),
@@ -1628,4 +2112,9 @@ await Promise.all([
   ),
   emit("openapi/frameos.openapi.json", openapi),
   emit("mcp/manifest.json", mcpManifest),
+  emitWorkspaceText("packages/sdk-python/frameos/client.py", pythonSdkClient()),
+  emitWorkspaceText(
+    "packages/sdk-python/frameos/__init__.py",
+    'from .client import FrameOSApiError, FrameOSClient\n\n__all__ = ["FrameOSApiError", "FrameOSClient"]\n',
+  ),
 ]);

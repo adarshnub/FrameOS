@@ -3,12 +3,14 @@ import {
   createId,
   fromSeconds,
   semanticAddDynamicCaptionsRequestSchema,
+  semanticCreateHighlightRequestSchema,
   semanticEditPlanSchema,
   semanticFindRequestSchema,
   semanticFindResultSchema,
   semanticMakeVerticalRequestSchema,
   semanticMatchCutsToMusicRequestSchema,
   semanticRemoveSilencesRequestSchema,
+  semanticSyncBrollRequestSchema,
   timeRangeSchema,
   toSeconds,
   type AnalysisSearchResult,
@@ -16,11 +18,13 @@ import {
   type Project,
   type SemanticEditPlan,
   type SemanticAddDynamicCaptionsRequest,
+  type SemanticCreateHighlightRequest,
   type SemanticFindRequest,
   type SemanticFindResult,
   type SemanticMakeVerticalRequest,
   type SemanticMatchCutsToMusicRequest,
   type SemanticRemoveSilencesRequest,
+  type SemanticSyncBrollRequest,
   type TimeRange,
 } from "@frameos/contracts";
 import type { AnalysisService } from "../analysis/analysis-service.js";
@@ -30,6 +34,170 @@ interface FrameInterval {
   start: number;
   end: number;
   artifactId: string;
+}
+
+type ProjectClip = Extract<
+  Project["sequences"][string]["tracks"][number]["items"][number],
+  { type: "clip" }
+>;
+
+type ProjectTrack = Project["sequences"][string]["tracks"][number];
+
+function clipTimelineStartFrame(
+  clip: ProjectClip,
+  rate: Project["sequences"][string]["format"]["frameRate"],
+  warnings: string[],
+): number {
+  const start = fromSeconds(toSeconds(clip.timelineRange.start), rate);
+  if (start.rounded) {
+    warnings.push(`Timeline start for clip ${clip.id} was rounded to frames`);
+  }
+  return start.time.value;
+}
+
+function sourceSecondsToClipValue(clip: ProjectClip, seconds: number): number {
+  return (
+    (seconds * clip.sourceRange.start.rate.numerator) /
+    clip.sourceRange.start.rate.denominator
+  );
+}
+
+function mapSourceSecondsToTimelineFrame(
+  clip: ProjectClip,
+  sourceSeconds: number,
+  rate: Project["sequences"][string]["format"]["frameRate"],
+  warnings: string[],
+): number | undefined {
+  const clipSourceStart = toSeconds(clip.sourceRange.start);
+  const clipSourceEnd = clipSourceStart + toSeconds(clip.sourceRange.duration);
+  if (sourceSeconds < clipSourceStart || sourceSeconds > clipSourceEnd) {
+    return undefined;
+  }
+  if (clip.timeMap.length === 0) {
+    const offset = fromSeconds(sourceSeconds - clipSourceStart, rate);
+    if (offset.rounded) {
+      warnings.push(
+        `Source mapping for clip ${clip.id} was rounded to sequence frames`,
+      );
+    }
+    return clipTimelineStartFrame(clip, rate, warnings) + offset.time.value;
+  }
+  const mapped = clip.timeMap.map((keyframe) => {
+    if (
+      typeof keyframe.value !== "number" ||
+      !Number.isFinite(keyframe.value)
+    ) {
+      warnings.push(
+        `Skipped retimed clip ${clip.id}; time-map value is not numeric`,
+      );
+      return undefined;
+    }
+    const frame = fromSeconds(toSeconds(keyframe.time), rate);
+    if (frame.rounded) {
+      warnings.push(
+        `Time-map keyframe for clip ${clip.id} was rounded to sequence frames`,
+      );
+    }
+    return {
+      frame: frame.time.value,
+      interpolation: keyframe.interpolation,
+      value: keyframe.value,
+    };
+  });
+  if (mapped.some((keyframe) => keyframe === undefined)) return undefined;
+  const keyframes = mapped as Array<{
+    frame: number;
+    interpolation: ProjectClip["timeMap"][number]["interpolation"];
+    value: number;
+  }>;
+  for (let index = 1; index < keyframes.length; index += 1) {
+    if (keyframes[index]!.value < keyframes[index - 1]!.value) {
+      warnings.push(
+        `Skipped retimed clip ${clip.id}; reverse source mapping is not supported by this semantic planner`,
+      );
+      return undefined;
+    }
+  }
+  const sourceValue = sourceSecondsToClipValue(clip, sourceSeconds);
+  const exact = keyframes.find(
+    (keyframe) => Math.abs(keyframe.value - sourceValue) < Number.EPSILON,
+  );
+  if (exact !== undefined) {
+    return clipTimelineStartFrame(clip, rate, warnings) + exact.frame;
+  }
+  for (let index = 0; index < keyframes.length - 1; index += 1) {
+    const left = keyframes[index]!;
+    const right = keyframes[index + 1]!;
+    if (sourceValue < left.value || sourceValue > right.value) continue;
+    if (left.interpolation !== "linear" || right.value === left.value) {
+      warnings.push(
+        `Skipped retimed clip ${clip.id}; ${left.interpolation} source mapping is not supported by this semantic planner`,
+      );
+      return undefined;
+    }
+    const progress = (sourceValue - left.value) / (right.value - left.value);
+    const localFrame = left.frame + progress * (right.frame - left.frame);
+    const rounded = Math.round(localFrame);
+    if (Math.abs(localFrame - rounded) > Number.EPSILON) {
+      warnings.push(
+        `Retimed source mapping for clip ${clip.id} was rounded to sequence frames`,
+      );
+    }
+    return clipTimelineStartFrame(clip, rate, warnings) + rounded;
+  }
+  return undefined;
+}
+
+function retimedSplitArguments(
+  clip: ProjectClip,
+  atFrame: number,
+  rate: Project["sequences"][string]["format"]["frameRate"],
+  rightClipId: string,
+):
+  | {
+      at: {
+        value: number;
+        rate: Project["sequences"][string]["format"]["frameRate"];
+      };
+      rightClipId: string;
+      leftEndKeyframeId?: string;
+      rightStartKeyframeId?: string;
+    }
+  | undefined {
+  const base = { at: { value: atFrame, rate }, rightClipId };
+  if (clip.timeMap.length === 0) return base;
+  const clipStart = fromSeconds(toSeconds(clip.timelineRange.start), rate);
+  if (clipStart.rounded) return undefined;
+  const localFrame = atFrame - clipStart.time.value;
+  const exact = clip.timeMap.some((keyframe) => {
+    const frame = fromSeconds(toSeconds(keyframe.time), rate);
+    return !frame.rounded && frame.time.value === localFrame;
+  });
+  return {
+    ...base,
+    ...(exact ? {} : { leftEndKeyframeId: createId() }),
+    rightStartKeyframeId: createId(),
+  };
+}
+
+function trackEndFrame(
+  track: ProjectTrack,
+  rate: Project["sequences"][string]["format"]["frameRate"],
+  warnings: string[],
+): number {
+  let end = 0;
+  for (const item of track.items) {
+    if (item.type === "transition") continue;
+    const start = fromSeconds(toSeconds(item.timelineRange.start), rate);
+    const duration = fromSeconds(toSeconds(item.timelineRange.duration), rate);
+    if (start.rounded || duration.rounded) {
+      warnings.push(
+        `Timeline range for item ${item.id} was rounded while planning highlight placement`,
+      );
+    }
+    end = Math.max(end, start.time.value + duration.time.value);
+  }
+  return end;
 }
 
 const semanticTypes: Record<SemanticFindRequest["kind"], string[]> = {
@@ -42,20 +210,11 @@ const semanticTypes: Record<SemanticFindRequest["kind"], string[]> = {
 };
 
 function intersectingIntervals(
-  clip: Extract<
-    Project["sequences"][string]["tracks"][number]["items"][number],
-    { type: "clip" }
-  >,
+  clip: ProjectClip,
   results: readonly AnalysisSearchResult[],
   request: SemanticRemoveSilencesRequest,
   warnings: string[],
 ): FrameInterval[] {
-  if (clip.timeMap.length > 0) {
-    warnings.push(
-      `Skipped retimed clip ${clip.id}; semantic source mapping is not linear`,
-    );
-    return [];
-  }
   const sourceStartSeconds = toSeconds(clip.sourceRange.start);
   const sourceEndSeconds =
     sourceStartSeconds + toSeconds(clip.sourceRange.duration);
@@ -73,17 +232,23 @@ function intersectingIntervals(
     );
     const endSeconds = Math.min(sourceEndSeconds, detectedEnd - paddingSeconds);
     if (endSeconds <= startSeconds) continue;
-    const startOffset = fromSeconds(startSeconds - sourceStartSeconds, rate);
-    const endOffset = fromSeconds(endSeconds - sourceStartSeconds, rate);
-    if (startOffset.rounded || endOffset.rounded) {
-      warnings.push(
-        `Silence boundaries for clip ${clip.id} were rounded to sequence frames`,
-      );
-    }
-    const clipStart = clip.timelineRange.start.value;
+    const mappedStart = mapSourceSecondsToTimelineFrame(
+      clip,
+      startSeconds,
+      rate,
+      warnings,
+    );
+    const mappedEnd = mapSourceSecondsToTimelineFrame(
+      clip,
+      endSeconds,
+      rate,
+      warnings,
+    );
+    if (mappedStart === undefined || mappedEnd === undefined) continue;
+    const clipStart = clipTimelineStartFrame(clip, rate, warnings);
     const clipEnd = clipStart + clip.timelineRange.duration.value;
-    const start = Math.max(clipStart, clipStart + startOffset.time.value);
-    const end = Math.min(clipEnd, clipStart + endOffset.time.value);
+    const start = Math.max(clipStart, mappedStart);
+    const end = Math.min(clipEnd, mappedEnd);
     if (end > start)
       intervals.push({ start, end, artifactId: result.artifactId });
   }
@@ -183,6 +348,18 @@ export function compileRemoveSilences(
         if (end <= start) continue;
         const sharedArguments = { sequenceId, trackId: track.id };
         if (end < currentEnd) {
+          const splitArguments = retimedSplitArguments(
+            item,
+            end,
+            item.timelineRange.start.rate,
+            createId(),
+          );
+          if (splitArguments === undefined) {
+            warnings.push(
+              `Skipped split after retimed silence in clip ${item.id}`,
+            );
+            continue;
+          }
           operations.push({
             operationId: createId(),
             type: "clip.split",
@@ -195,13 +372,24 @@ export function compileRemoveSilences(
             },
             arguments: {
               ...sharedArguments,
-              at: { value: end, rate: item.timelineRange.start.rate },
-              rightClipId: createId(),
+              ...splitArguments,
             },
           });
         }
         if (start > currentStart) {
           const silenceClipId = createId();
+          const splitArguments = retimedSplitArguments(
+            item,
+            start,
+            item.timelineRange.start.rate,
+            silenceClipId,
+          );
+          if (splitArguments === undefined) {
+            warnings.push(
+              `Skipped split before retimed silence in clip ${item.id}`,
+            );
+            continue;
+          }
           operations.push(
             {
               operationId: createId(),
@@ -215,8 +403,7 @@ export function compileRemoveSilences(
               },
               arguments: {
                 ...sharedArguments,
-                at: { value: start, rate: item.timelineRange.start.rate },
-                rightClipId: silenceClipId,
+                ...splitArguments,
               },
             },
             {
@@ -487,13 +674,6 @@ export function compileMatchCutsToMusic(
       404,
     );
   }
-  if (musicClip.timeMap.length > 0) {
-    throw new FrameOSError(
-      "CAPABILITY_UNAVAILABLE",
-      "Beat-to-timeline mapping for a retimed music clip is unavailable",
-      424,
-    );
-  }
   const selectedTrackIds =
     request.trackIds === undefined
       ? new Set(
@@ -520,10 +700,6 @@ export function compileMatchCutsToMusic(
   const sourceEndSeconds =
     sourceStartSeconds + toSeconds(musicClip.sourceRange.duration);
   const timelineRate = sequence.format.frameRate;
-  const timelineStart = fromSeconds(
-    toSeconds(musicClip.timelineRange.start),
-    timelineRate,
-  ).time.value;
   const candidates: TimelineBeat[] = [];
   for (const result of beatResults) {
     if (
@@ -541,15 +717,15 @@ export function compileMatchCutsToMusic(
     ) {
       continue;
     }
-    const offset = fromSeconds(
-      sourceSeconds - sourceStartSeconds,
+    const mappedFrame = mapSourceSecondsToTimelineFrame(
+      musicClip,
+      sourceSeconds,
       timelineRate,
+      warnings,
     );
-    if (offset.rounded) {
-      warnings.push("Some beat positions were rounded to sequence frames");
-    }
+    if (mappedFrame === undefined) continue;
     candidates.push({
-      frame: timelineStart + offset.time.value,
+      frame: mappedFrame,
       artifactId: result.artifactId,
       confidence: result.confidence ?? 0,
     });
@@ -596,10 +772,6 @@ export function compileMatchCutsToMusic(
         warnings.push(`Skipped locked clip ${item.id}`);
         continue;
       }
-      if (item.timeMap.length > 0) {
-        warnings.push(`Skipped retimed clip ${item.id}`);
-        continue;
-      }
       const start = fromSeconds(
         toSeconds(item.timelineRange.start),
         timelineRate,
@@ -612,6 +784,16 @@ export function compileMatchCutsToMusic(
         .filter((beat) => beat.frame > start && beat.frame < start + duration)
         .toReversed();
       for (const beat of clipBeats) {
+        const splitArguments = retimedSplitArguments(
+          item,
+          beat.frame,
+          timelineRate,
+          createId(),
+        );
+        if (splitArguments === undefined) {
+          warnings.push(`Skipped retimed split for clip ${item.id}`);
+          continue;
+        }
         operations.push({
           operationId: createId(),
           type: "clip.split",
@@ -625,8 +807,7 @@ export function compileMatchCutsToMusic(
           arguments: {
             sequenceId,
             trackId: track.id,
-            at: { value: beat.frame, rate: timelineRate },
-            rightClipId: createId(),
+            ...splitArguments,
           },
         });
         affectedRanges.push({
@@ -665,11 +846,6 @@ export function compileMatchCutsToMusic(
   });
 }
 
-type ProjectClip = Extract<
-  Project["sequences"][string]["tracks"][number]["items"][number],
-  { type: "clip" }
->;
-
 function mapSourceRangeToTimeline(
   clip: ProjectClip,
   sourceRange: TimeRange,
@@ -684,22 +860,23 @@ function mapSourceRangeToTimeline(
     toSeconds(sourceRange.start) + toSeconds(sourceRange.duration),
   );
   if (sourceEnd <= sourceStart) return undefined;
-  const startOffset = fromSeconds(sourceStart - clipSourceStart, projectRate);
-  const duration = fromSeconds(sourceEnd - sourceStart, projectRate);
-  const clipTimelineStart = fromSeconds(
-    toSeconds(clip.timelineRange.start),
+  const start = mapSourceSecondsToTimelineFrame(
+    clip,
+    sourceStart,
     projectRate,
+    warnings,
   );
-  if (startOffset.rounded || duration.rounded || clipTimelineStart.rounded) {
-    warnings.push("Some transcript positions were rounded to sequence frames");
-  }
-  if (duration.time.value <= 0) return undefined;
+  const end = mapSourceSecondsToTimelineFrame(
+    clip,
+    sourceEnd,
+    projectRate,
+    warnings,
+  );
+  if (start === undefined || end === undefined || end <= start)
+    return undefined;
   return {
-    start: {
-      value: clipTimelineStart.time.value + startOffset.time.value,
-      rate: projectRate,
-    },
-    duration: duration.time,
+    start: { value: start, rate: projectRate },
+    duration: { value: end - start, rate: projectRate },
   };
 }
 
@@ -811,10 +988,6 @@ export function compileAddDynamicCaptions(
     artifactId: string;
   }> = [];
   for (const clip of clips) {
-    if (clip.timeMap.length > 0) {
-      warnings.push(`Skipped retimed source clip ${clip.id}`);
-      continue;
-    }
     for (const result of transcriptResults) {
       const text = result.text?.trim();
       if (
@@ -931,6 +1104,860 @@ export function compileAddDynamicCaptions(
   });
 }
 
+interface HighlightCandidate {
+  clip: ProjectClip;
+  trackId: string;
+  sourceRange: TimeRange;
+  timelineDurationFrames: number;
+  score: number;
+  artifactId: string;
+  sourceStartSeconds: number;
+}
+
+interface SyncBrollTarget {
+  range: TimeRange;
+  artifactId: string;
+  startFrame: number;
+  durationFrames: number;
+}
+
+interface SyncBrollCandidate {
+  clip: ProjectClip;
+  trackId: string;
+  sourceRange: TimeRange;
+  timelineDurationFrames: number;
+  score: number;
+  artifactId: string;
+  sourceStartSeconds: number;
+}
+
+function trackHasOverlap(
+  track: ProjectTrack,
+  startFrame: number,
+  durationFrames: number,
+  rate: Project["sequences"][string]["format"]["frameRate"],
+  warnings: string[],
+): boolean {
+  const endFrame = startFrame + durationFrames;
+  for (const item of track.items) {
+    if (item.type === "transition") continue;
+    const start = fromSeconds(toSeconds(item.timelineRange.start), rate);
+    const duration = fromSeconds(toSeconds(item.timelineRange.duration), rate);
+    if (start.rounded || duration.rounded) {
+      warnings.push(
+        `Destination item ${item.id} was rounded while checking B-roll overlap`,
+      );
+    }
+    if (
+      start.time.value < endFrame &&
+      start.time.value + duration.time.value > startFrame
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function compileSyncBroll(
+  project: Project,
+  input: SemanticSyncBrollRequest,
+  analysisResults: readonly AnalysisSearchResult[],
+): SemanticEditPlan {
+  const request = semanticSyncBrollRequestSchema.parse(input);
+  if (request.projectId !== project.projectId) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Semantic edit project id does not match the supplied project state",
+      422,
+    );
+  }
+  if (
+    request.baseRevision !== undefined &&
+    request.baseRevision !== project.revision
+  ) {
+    throw new FrameOSError(
+      "REVISION_CONFLICT",
+      `Expected revision ${request.baseRevision.toString()}, found ${project.revision.toString()}`,
+      409,
+    );
+  }
+  const sequenceId = request.sequenceId ?? project.settings.defaultSequenceId;
+  const sequence = project.sequences[sequenceId];
+  if (sequence === undefined) {
+    throw new FrameOSError(
+      "NOT_FOUND",
+      `Sequence ${sequenceId} was not found`,
+      404,
+    );
+  }
+  const requestedTargetIds = new Set(request.targetClipIds);
+  const targetClips = sequence.tracks.flatMap((track) =>
+    track.items.flatMap((item) =>
+      item.type === "clip" && requestedTargetIds.has(item.id) ? [item] : [],
+    ),
+  );
+  const foundTargetIds = new Set(targetClips.map((clip) => clip.id));
+  const missingTargetIds = request.targetClipIds.filter(
+    (id) => !foundTargetIds.has(id),
+  );
+  if (missingTargetIds.length > 0) {
+    throw new FrameOSError(
+      "NOT_FOUND",
+      `Target clips were not found in sequence ${sequenceId}: ${missingTargetIds.join(", ")}`,
+      404,
+    );
+  }
+
+  const brollTrackIds =
+    request.brollTrackIds === undefined
+      ? new Set(
+          sequence.tracks
+            .filter((track) => track.kind === "video")
+            .map((track) => track.id),
+        )
+      : new Set(request.brollTrackIds);
+  const unknownBrollTracks = [...brollTrackIds].filter(
+    (trackId) => !sequence.tracks.some((track) => track.id === trackId),
+  );
+  if (unknownBrollTracks.length > 0) {
+    throw new FrameOSError(
+      "NOT_FOUND",
+      `B-roll tracks were not found in sequence ${sequenceId}: ${unknownBrollTracks.join(", ")}`,
+      404,
+    );
+  }
+
+  const warnings: string[] = [
+    "B-roll sync pairs analysis ranges deterministically; preview visual relevance, continuity, and occlusion before commit",
+  ];
+  const targetTypes = new Set(request.targetTypes);
+  const brollTypes = new Set(request.brollTypes);
+  const selectedTargetArtifacts =
+    request.targetArtifactIds === undefined
+      ? undefined
+      : new Set(request.targetArtifactIds);
+  const selectedBrollArtifacts =
+    request.brollArtifactIds === undefined
+      ? undefined
+      : new Set(request.brollArtifactIds);
+  const selectedBrollAssets =
+    request.brollAssetIds === undefined
+      ? undefined
+      : new Set(request.brollAssetIds);
+  const targets: SyncBrollTarget[] = [];
+  for (const clip of targetClips) {
+    for (const result of analysisResults) {
+      if (
+        result.range === undefined ||
+        result.assetId !== clip.assetId ||
+        !targetTypes.has(result.type) ||
+        (result.confidence ?? result.score) < request.minimumTargetConfidence ||
+        (selectedTargetArtifacts !== undefined &&
+          !selectedTargetArtifacts.has(result.artifactId))
+      ) {
+        continue;
+      }
+      const paddedRange: TimeRange = {
+        start: fromSeconds(
+          toSeconds(result.range.start) + request.edgePaddingMs / 1_000,
+          result.range.start.rate,
+        ).time,
+        duration: fromSeconds(
+          Math.max(
+            0,
+            toSeconds(result.range.duration) -
+              (request.edgePaddingMs * 2) / 1_000,
+          ),
+          result.range.duration.rate,
+        ).time,
+      };
+      const mapped = mapSourceRangeToTimeline(
+        clip,
+        paddedRange,
+        sequence.format.frameRate,
+        warnings,
+      );
+      if (mapped === undefined) continue;
+      targets.push({
+        range: mapped,
+        artifactId: result.artifactId,
+        startFrame: mapped.start.value,
+        durationFrames: mapped.duration.value,
+      });
+    }
+  }
+  targets.sort(
+    (left, right) =>
+      left.startFrame - right.startFrame ||
+      left.artifactId.localeCompare(right.artifactId),
+  );
+
+  const candidates: SyncBrollCandidate[] = [];
+  for (const result of analysisResults) {
+    if (
+      result.range === undefined ||
+      !brollTypes.has(result.type) ||
+      (selectedBrollArtifacts !== undefined &&
+        !selectedBrollArtifacts.has(result.artifactId)) ||
+      (selectedBrollAssets !== undefined &&
+        !selectedBrollAssets.has(result.assetId))
+    ) {
+      continue;
+    }
+    const score = Math.max(
+      result.score,
+      result.confidence ?? 0,
+      result.semanticScore ?? 0,
+      result.lexicalScore ?? 0,
+    );
+    if (score < request.minimumBrollScore) continue;
+    const detectedStart = toSeconds(result.range.start);
+    const detectedEnd = detectedStart + toSeconds(result.range.duration);
+    const sourceStartSeconds = detectedStart + request.edgePaddingMs / 1_000;
+    const sourceEndSeconds = detectedEnd - request.edgePaddingMs / 1_000;
+    if (sourceEndSeconds <= sourceStartSeconds) continue;
+    for (const track of sequence.tracks) {
+      if (!brollTrackIds.has(track.id)) continue;
+      if (track.kind !== "video") {
+        warnings.push(`Skipped non-video B-roll track ${track.id}`);
+        continue;
+      }
+      if (track.locked) {
+        warnings.push(`Skipped locked B-roll track ${track.id}`);
+        continue;
+      }
+      for (const clip of track.items) {
+        if (
+          clip.type !== "clip" ||
+          !clip.enabled ||
+          clip.assetId !== result.assetId ||
+          requestedTargetIds.has(clip.id)
+        ) {
+          continue;
+        }
+        if (clip.locked) {
+          warnings.push(`Skipped locked B-roll clip ${clip.id}`);
+          continue;
+        }
+        if (clip.timeMap.length > 0) {
+          warnings.push(
+            `Skipped retimed B-roll clip ${clip.id}; sync_broll subclip extraction requires an exact retime adapter`,
+          );
+          continue;
+        }
+        const clipSourceStart = toSeconds(clip.sourceRange.start);
+        const clipSourceEnd =
+          clipSourceStart + toSeconds(clip.sourceRange.duration);
+        const sourceStart = Math.max(clipSourceStart, sourceStartSeconds);
+        const sourceEnd = Math.min(clipSourceEnd, sourceEndSeconds);
+        const durationSeconds = Math.min(
+          sourceEnd - sourceStart,
+          request.maximumOverlayDurationMs / 1_000,
+        );
+        if (durationSeconds <= 0) continue;
+        const sourceStartTime = fromSeconds(
+          sourceStart,
+          clip.sourceRange.start.rate,
+        );
+        const sourceDurationTime = fromSeconds(
+          durationSeconds,
+          clip.sourceRange.duration.rate,
+        );
+        const timelineDuration = fromSeconds(
+          durationSeconds,
+          sequence.format.frameRate,
+        );
+        if (
+          sourceStartTime.rounded ||
+          sourceDurationTime.rounded ||
+          timelineDuration.rounded
+        ) {
+          warnings.push(
+            `B-roll range for clip ${clip.id} was rounded to frame boundaries`,
+          );
+        }
+        if (timelineDuration.time.value <= 0) continue;
+        candidates.push({
+          clip,
+          trackId: track.id,
+          sourceRange: {
+            start: sourceStartTime.time,
+            duration: sourceDurationTime.time,
+          },
+          timelineDurationFrames: timelineDuration.time.value,
+          score,
+          artifactId: result.artifactId,
+          sourceStartSeconds: sourceStart,
+        });
+      }
+    }
+  }
+  candidates.sort(
+    (left, right) =>
+      right.score - left.score ||
+      left.sourceStartSeconds - right.sourceStartSeconds ||
+      left.clip.id.localeCompare(right.clip.id),
+  );
+  if (targets.length === 0 || candidates.length === 0) {
+    warnings.push(
+      targets.length === 0
+        ? "No eligible target ranges were found for the selected target clips and analysis artifacts"
+        : "No eligible B-roll source ranges were found for the selected tracks, assets, artifacts, and score threshold",
+    );
+    return semanticEditPlanSchema.parse({
+      projectId: project.projectId,
+      baseRevision: project.revision,
+      semanticOperation: "semantic.sync_broll",
+      operations: [],
+      sourceArtifactIds: [],
+      affectedRanges: [],
+      warnings: [...new Set(warnings)],
+    });
+  }
+
+  let destinationTrack = request.destinationTrackId
+    ? sequence.tracks.find((track) => track.id === request.destinationTrackId)
+    : undefined;
+  if (
+    request.destinationTrackId !== undefined &&
+    destinationTrack === undefined
+  ) {
+    throw new FrameOSError(
+      "NOT_FOUND",
+      `Destination track ${request.destinationTrackId} was not found in sequence ${sequenceId}`,
+      404,
+    );
+  }
+  if (destinationTrack !== undefined) {
+    if (destinationTrack.kind !== "video") {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        `Destination track ${destinationTrack.id} must be a video track`,
+        422,
+      );
+    }
+    if (destinationTrack.locked) {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        `Destination track ${destinationTrack.id} is locked`,
+        422,
+      );
+    }
+  }
+  const destinationTrackId = destinationTrack?.id ?? createId();
+  const operations: Operation[] = [];
+  if (destinationTrack === undefined) {
+    const order =
+      sequence.tracks.reduce(
+        (maximum, track) => Math.max(maximum, track.order),
+        -1,
+      ) + 1;
+    destinationTrack = {
+      id: destinationTrackId,
+      name: request.destinationTrackName,
+      kind: "video",
+      order,
+      enabled: true,
+      locked: false,
+      muted: false,
+      syncLocked: true,
+      items: [],
+      effects: [],
+      metadata: { semanticOperation: "semantic.sync_broll" },
+    };
+    operations.push({
+      operationId: createId(),
+      type: "track.add",
+      preconditions: [{ kind: "entity_exists", entityId: sequence.id }],
+      provenance: {
+        actorType: "system",
+        actorId: "semantic.sync_broll",
+        reason: "Create a destination track for synchronized B-roll overlays",
+      },
+      arguments: {
+        sequenceId,
+        track: destinationTrack,
+      },
+    });
+  }
+
+  const affectedRanges: TimeRange[] = [];
+  const sourceArtifactIds = new Set<string>();
+  const plannedOverlayRanges: Array<{ start: number; end: number }> = [];
+  let candidateIndex = 0;
+  for (const target of targets) {
+    if (candidateIndex >= candidates.length) break;
+    const candidate = candidates[candidateIndex]!;
+    candidateIndex += 1;
+    const clipFrames = Math.min(
+      target.durationFrames,
+      candidate.timelineDurationFrames,
+      fromSeconds(
+        request.maximumOverlayDurationMs / 1_000,
+        sequence.format.frameRate,
+      ).time.value,
+    );
+    if (clipFrames <= 0) continue;
+    const overlayEndFrame = target.startFrame + clipFrames;
+    if (
+      plannedOverlayRanges.some(
+        (range) =>
+          range.start < overlayEndFrame && range.end > target.startFrame,
+      )
+    ) {
+      warnings.push(
+        `Skipped B-roll overlay at frame ${target.startFrame.toString()} because another planned overlay already covers that range`,
+      );
+      continue;
+    }
+    if (
+      trackHasOverlap(
+        destinationTrack,
+        target.startFrame,
+        clipFrames,
+        sequence.format.frameRate,
+        warnings,
+      )
+    ) {
+      warnings.push(
+        `Skipped B-roll overlay at frame ${target.startFrame.toString()} because destination track ${destinationTrack.id} already has media in that range`,
+      );
+      continue;
+    }
+    const durationSeconds =
+      (clipFrames * sequence.format.frameRate.denominator) /
+      sequence.format.frameRate.numerator;
+    const sourceDuration = fromSeconds(
+      durationSeconds,
+      candidate.sourceRange.duration.rate,
+    );
+    if (sourceDuration.time.value <= 0) continue;
+    const timelineRange = {
+      start: { value: target.startFrame, rate: sequence.format.frameRate },
+      duration: { value: clipFrames, rate: sequence.format.frameRate },
+    };
+    operations.push({
+      operationId: createId(),
+      type: "clip.overwrite",
+      preconditions: [{ kind: "entity_exists", entityId: destinationTrackId }],
+      provenance: {
+        actorType: "system",
+        actorId: "semantic.sync_broll",
+        reason: `Align B-roll artifact ${candidate.artifactId} to target artifact ${target.artifactId}`,
+      },
+      arguments: {
+        sequenceId,
+        trackId: destinationTrackId,
+        clip: {
+          ...structuredClone(candidate.clip),
+          id: createId(),
+          name: `${candidate.clip.name} B-roll`,
+          sourceRange: {
+            start: candidate.sourceRange.start,
+            duration: sourceDuration.time,
+          },
+          timelineRange,
+          timeMap: [],
+          links: [],
+          semanticMetadata: {
+            ...candidate.clip.semanticMetadata,
+            semanticOperation: "semantic.sync_broll",
+            sourceClipId: candidate.clip.id,
+            sourceTrackId: candidate.trackId,
+            sourceArtifactId: candidate.artifactId,
+            targetArtifactId: target.artifactId,
+            score: candidate.score,
+          },
+        },
+      },
+    });
+    affectedRanges.push(timelineRange);
+    plannedOverlayRanges.push({
+      start: target.startFrame,
+      end: overlayEndFrame,
+    });
+    sourceArtifactIds.add(candidate.artifactId);
+    sourceArtifactIds.add(target.artifactId);
+    if (operations.length > request.maximumOperations) {
+      throw new FrameOSError(
+        "RESOURCE_LIMIT",
+        `B-roll sync requires more than ${request.maximumOperations.toString()} operations; reduce target clips, analysis ranges, or duration`,
+        413,
+      );
+    }
+  }
+  if (affectedRanges.length === 0) {
+    warnings.push(
+      "No B-roll overlays were planned after destination overlap and duration checks",
+    );
+  }
+  if (analysisResults.length === 500) {
+    warnings.push(
+      "B-roll sync reached its 500-segment search limit; narrow clips, tracks, assets, or analysis types",
+    );
+  }
+  return semanticEditPlanSchema.parse({
+    projectId: project.projectId,
+    baseRevision: project.revision,
+    semanticOperation: "semantic.sync_broll",
+    operations,
+    sourceArtifactIds: [...sourceArtifactIds].sort(),
+    affectedRanges,
+    warnings: [...new Set(warnings)],
+  });
+}
+
+export function compileCreateHighlight(
+  project: Project,
+  input: SemanticCreateHighlightRequest,
+  analysisResults: readonly AnalysisSearchResult[],
+): SemanticEditPlan {
+  const request = semanticCreateHighlightRequestSchema.parse(input);
+  if (request.projectId !== project.projectId) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Semantic edit project id does not match the supplied project state",
+      422,
+    );
+  }
+  if (
+    request.baseRevision !== undefined &&
+    request.baseRevision !== project.revision
+  ) {
+    throw new FrameOSError(
+      "REVISION_CONFLICT",
+      `Expected revision ${request.baseRevision.toString()}, found ${project.revision.toString()}`,
+      409,
+    );
+  }
+  const sequenceId = request.sequenceId ?? project.settings.defaultSequenceId;
+  const sequence = project.sequences[sequenceId];
+  if (sequence === undefined) {
+    throw new FrameOSError(
+      "NOT_FOUND",
+      `Sequence ${sequenceId} was not found`,
+      404,
+    );
+  }
+  const sourceTrackIds =
+    request.sourceTrackIds === undefined
+      ? new Set(
+          sequence.tracks
+            .filter((track) => track.kind === "video")
+            .map((track) => track.id),
+        )
+      : new Set(request.sourceTrackIds);
+  const unknownSourceTracks = [...sourceTrackIds].filter(
+    (trackId) => !sequence.tracks.some((track) => track.id === trackId),
+  );
+  if (unknownSourceTracks.length > 0) {
+    throw new FrameOSError(
+      "NOT_FOUND",
+      `Source tracks were not found in sequence ${sequenceId}: ${unknownSourceTracks.join(", ")}`,
+      404,
+    );
+  }
+  const warnings: string[] = [
+    "Highlight creation uses deterministic score and timeline ordering; preview pacing and story continuity before commit",
+  ];
+  const selectedAssets =
+    request.assetIds === undefined ? undefined : new Set(request.assetIds);
+  const selectedArtifacts =
+    request.artifactIds === undefined
+      ? undefined
+      : new Set(request.artifactIds);
+  const selectedTypes = new Set(request.types);
+  const candidates: HighlightCandidate[] = [];
+  for (const result of analysisResults) {
+    if (
+      result.range === undefined ||
+      !selectedTypes.has(result.type) ||
+      (selectedArtifacts !== undefined &&
+        !selectedArtifacts.has(result.artifactId)) ||
+      (selectedAssets !== undefined && !selectedAssets.has(result.assetId))
+    ) {
+      continue;
+    }
+    const score = Math.max(
+      result.score,
+      result.confidence ?? 0,
+      result.semanticScore ?? 0,
+      result.lexicalScore ?? 0,
+    );
+    if (score < request.minimumScore) continue;
+    const detectedStart = toSeconds(result.range.start);
+    const detectedEnd = detectedStart + toSeconds(result.range.duration);
+    const paddedStart = detectedStart + request.edgePaddingMs / 1_000;
+    const paddedEnd = detectedEnd - request.edgePaddingMs / 1_000;
+    if (paddedEnd <= paddedStart) continue;
+    for (const track of sequence.tracks) {
+      if (!sourceTrackIds.has(track.id)) continue;
+      if (track.kind !== "video") {
+        warnings.push(`Skipped non-video source track ${track.id}`);
+        continue;
+      }
+      if (track.locked) {
+        warnings.push(`Skipped locked source track ${track.id}`);
+        continue;
+      }
+      for (const clip of track.items) {
+        if (
+          clip.type !== "clip" ||
+          clip.assetId !== result.assetId ||
+          !clip.enabled
+        ) {
+          continue;
+        }
+        if (clip.locked) {
+          warnings.push(`Skipped locked source clip ${clip.id}`);
+          continue;
+        }
+        if (clip.timeMap.length > 0) {
+          warnings.push(
+            `Skipped retimed source clip ${clip.id}; highlight subclip extraction requires an exact retime adapter`,
+          );
+          continue;
+        }
+        const clipSourceStart = toSeconds(clip.sourceRange.start);
+        const clipSourceEnd =
+          clipSourceStart + toSeconds(clip.sourceRange.duration);
+        const sourceStart = Math.max(clipSourceStart, paddedStart);
+        const sourceEnd = Math.min(clipSourceEnd, paddedEnd);
+        const durationSeconds = Math.min(
+          sourceEnd - sourceStart,
+          request.maximumClipDurationMs / 1_000,
+        );
+        if (durationSeconds <= 0) continue;
+        const sourceStartTime = fromSeconds(
+          sourceStart,
+          clip.sourceRange.start.rate,
+        );
+        const sourceDurationTime = fromSeconds(
+          durationSeconds,
+          clip.sourceRange.duration.rate,
+        );
+        const timelineDuration = fromSeconds(
+          durationSeconds,
+          sequence.format.frameRate,
+        );
+        if (
+          sourceStartTime.rounded ||
+          sourceDurationTime.rounded ||
+          timelineDuration.rounded
+        ) {
+          warnings.push(
+            `Highlight range for clip ${clip.id} was rounded to frame boundaries`,
+          );
+        }
+        if (timelineDuration.time.value <= 0) continue;
+        candidates.push({
+          clip,
+          trackId: track.id,
+          sourceRange: {
+            start: sourceStartTime.time,
+            duration: sourceDurationTime.time,
+          },
+          timelineDurationFrames: timelineDuration.time.value,
+          score,
+          artifactId: result.artifactId,
+          sourceStartSeconds: sourceStart,
+        });
+      }
+    }
+  }
+  candidates.sort(
+    (left, right) =>
+      right.score - left.score ||
+      left.sourceStartSeconds - right.sourceStartSeconds ||
+      left.clip.id.localeCompare(right.clip.id),
+  );
+  if (candidates.length === 0) {
+    warnings.push(
+      "No eligible highlight segments were found for the selected tracks, assets, analysis types, and score threshold",
+    );
+    return semanticEditPlanSchema.parse({
+      projectId: project.projectId,
+      baseRevision: project.revision,
+      semanticOperation: "semantic.create_highlight",
+      operations: [],
+      sourceArtifactIds: [],
+      affectedRanges: [],
+      warnings: [...new Set(warnings)],
+    });
+  }
+
+  let destinationTrack = request.destinationTrackId
+    ? sequence.tracks.find((track) => track.id === request.destinationTrackId)
+    : undefined;
+  if (
+    request.destinationTrackId !== undefined &&
+    destinationTrack === undefined
+  ) {
+    throw new FrameOSError(
+      "NOT_FOUND",
+      `Destination track ${request.destinationTrackId} was not found in sequence ${sequenceId}`,
+      404,
+    );
+  }
+  if (destinationTrack !== undefined) {
+    if (destinationTrack.kind !== "video") {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        `Destination track ${destinationTrack.id} must be a video track`,
+        422,
+      );
+    }
+    if (destinationTrack.locked) {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        `Destination track ${destinationTrack.id} is locked`,
+        422,
+      );
+    }
+  }
+  const destinationTrackId = destinationTrack?.id ?? createId();
+  const operations: Operation[] = [];
+  if (destinationTrack === undefined) {
+    const order =
+      sequence.tracks.reduce(
+        (maximum, track) => Math.max(maximum, track.order),
+        -1,
+      ) + 1;
+    destinationTrack = {
+      id: destinationTrackId,
+      name: request.destinationTrackName,
+      kind: "video",
+      order,
+      enabled: true,
+      locked: false,
+      muted: false,
+      syncLocked: true,
+      items: [],
+      effects: [],
+      metadata: {
+        semanticOperation: "semantic.create_highlight",
+      },
+    };
+    operations.push({
+      operationId: createId(),
+      type: "track.add",
+      preconditions: [{ kind: "entity_exists", entityId: sequence.id }],
+      provenance: {
+        actorType: "system",
+        actorId: "semantic.create_highlight",
+        reason:
+          "Create a destination track for the generated highlight assembly",
+      },
+      arguments: {
+        sequenceId,
+        track: destinationTrack,
+      },
+    });
+  }
+
+  const totalDurationFrames = fromSeconds(
+    request.totalDurationMs / 1_000,
+    sequence.format.frameRate,
+  ).time.value;
+  let assembledFrames = trackEndFrame(
+    destinationTrack,
+    sequence.format.frameRate,
+    warnings,
+  );
+  const targetEndFrame = assembledFrames + totalDurationFrames;
+  const affectedRanges: TimeRange[] = [];
+  const sourceArtifactIds = new Set<string>();
+  for (const candidate of candidates) {
+    const remainingFrames = targetEndFrame - assembledFrames;
+    if (remainingFrames <= 0) break;
+    const clipFrames = Math.min(
+      candidate.timelineDurationFrames,
+      remainingFrames,
+    );
+    if (clipFrames <= 0) continue;
+    const durationSeconds =
+      (clipFrames * sequence.format.frameRate.denominator) /
+      sequence.format.frameRate.numerator;
+    const sourceDuration = fromSeconds(
+      durationSeconds,
+      candidate.sourceRange.duration.rate,
+    );
+    if (sourceDuration.time.value <= 0) continue;
+    if (sourceDuration.rounded) {
+      warnings.push(
+        `Highlight tail for clip ${candidate.clip.id} was rounded to source frames`,
+      );
+    }
+    const timelineRange = {
+      start: { value: assembledFrames, rate: sequence.format.frameRate },
+      duration: { value: clipFrames, rate: sequence.format.frameRate },
+    };
+    operations.push({
+      operationId: createId(),
+      type: "clip.append",
+      preconditions: [{ kind: "entity_exists", entityId: destinationTrackId }],
+      provenance: {
+        actorType: "system",
+        actorId: "semantic.create_highlight",
+        reason: `Append highlight segment selected from analysis artifact ${candidate.artifactId}`,
+      },
+      arguments: {
+        sequenceId,
+        trackId: destinationTrackId,
+        clip: {
+          ...structuredClone(candidate.clip),
+          id: createId(),
+          name: `${candidate.clip.name} highlight`,
+          sourceRange: {
+            start: candidate.sourceRange.start,
+            duration: sourceDuration.time,
+          },
+          timelineRange,
+          timeMap: [],
+          links: [],
+          semanticMetadata: {
+            ...candidate.clip.semanticMetadata,
+            semanticOperation: "semantic.create_highlight",
+            sourceClipId: candidate.clip.id,
+            sourceTrackId: candidate.trackId,
+            sourceArtifactId: candidate.artifactId,
+            score: candidate.score,
+          },
+        },
+      },
+    });
+    affectedRanges.push(timelineRange);
+    sourceArtifactIds.add(candidate.artifactId);
+    assembledFrames += clipFrames;
+    if (operations.length > request.maximumOperations) {
+      throw new FrameOSError(
+        "RESOURCE_LIMIT",
+        `Highlight creation requires more than ${request.maximumOperations.toString()} operations; reduce duration, tracks, or analysis types`,
+        413,
+      );
+    }
+  }
+  if (affectedRanges.length === 0) {
+    warnings.push(
+      "No eligible highlight segments were found for the selected tracks, assets, analysis types, and score threshold",
+    );
+  }
+  if (analysisResults.length === 500) {
+    warnings.push(
+      "Highlight planning reached its 500-segment search limit; narrow assets, tracks, or analysis types",
+    );
+  }
+  return semanticEditPlanSchema.parse({
+    projectId: project.projectId,
+    baseRevision: project.revision,
+    semanticOperation: "semantic.create_highlight",
+    operations,
+    sourceArtifactIds: [...sourceArtifactIds].sort(),
+    affectedRanges,
+    warnings: [...new Set(warnings)],
+  });
+}
+
 export class SemanticService {
   public constructor(
     private readonly projects: ProjectStore,
@@ -1037,5 +2064,37 @@ export class SemanticService {
       limit: 500,
     });
     return compileAddDynamicCaptions(project, request, transcriptResults);
+  }
+
+  public async planCreateHighlight(
+    input: SemanticCreateHighlightRequest,
+  ): Promise<SemanticEditPlan> {
+    const request = semanticCreateHighlightRequestSchema.parse(input);
+    const project = await this.projects.load(request.projectId);
+    const results = await this.analysis.search({
+      projectId: request.projectId,
+      query: request.query,
+      mode: "lexical",
+      ...(request.assetIds === undefined ? {} : { assetIds: request.assetIds }),
+      types: request.types,
+      limit: 500,
+    });
+    return compileCreateHighlight(project, request, results);
+  }
+
+  public async planSyncBroll(
+    input: SemanticSyncBrollRequest,
+  ): Promise<SemanticEditPlan> {
+    const request = semanticSyncBrollRequestSchema.parse(input);
+    const project = await this.projects.load(request.projectId);
+    const types = [...new Set([...request.targetTypes, ...request.brollTypes])];
+    const results = await this.analysis.search({
+      projectId: request.projectId,
+      query: request.query,
+      mode: "lexical",
+      types,
+      limit: 500,
+    });
+    return compileSyncBroll(project, request, results);
   }
 }

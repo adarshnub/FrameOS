@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -46,6 +46,73 @@ describe("HTTP control plane", () => {
     expect(response.statusCode).toBe(401);
     expect(response.json().error.code).toBe("UNAUTHORIZED");
     expect(response.body).not.toContain(token);
+  });
+
+  it("serves the browser feature lab from the inspector route", async () => {
+    const landing = await app.inject({ method: "GET", url: "/" });
+    expect(landing.statusCode).toBe(200);
+    expect(landing.body).toContain("The timeline");
+    expect(landing.body).toContain("early-access-form");
+
+    const page = await app.inject({ method: "GET", url: "/inspector" });
+    expect(page.statusCode).toBe(200);
+    expect(page.headers["content-type"]).toContain("text/html");
+    expect(page.body).toContain("FrameOS Feature Lab");
+    expect(page.body).toContain("Implemented Feature Tests");
+    expect(page.body).toContain("Agent Workbench");
+    expect(page.body).toContain("Live Operations Log");
+
+    const script = await app.inject({
+      method: "GET",
+      url: "/inspector/app.js",
+    });
+    expect(script.statusCode).toBe(200);
+    expect(script.headers["content-type"]).toContain("text/javascript");
+    expect(script.body).toContain("/api/v1/semantic/remove-silences/plan");
+    expect(script.body).toContain("/api/v1/admin/usage");
+
+    const operation = await app.inject({
+      method: "GET",
+      url: "/api/v1/operations/project.metadata.set",
+      headers: authorization,
+    });
+    expect(operation.statusCode).toBe(200);
+    expect(operation.json().data).toMatchObject({
+      name: "project.metadata.set",
+      maturity: "implemented",
+      inputSchema: { type: "object" },
+    });
+  });
+
+  it("serves redacted structured logs and provider usage to administrators", async () => {
+    await app.inject({ method: "GET", url: "/health" });
+    services.observability.record({
+      level: "error",
+      category: "test",
+      eventType: "test.failure",
+      message: "Test error",
+      data: { authorization: "secret-value", detail: "safe" },
+    });
+    const logs = await app.inject({
+      method: "GET",
+      url: "/api/v1/admin/logs?limit=20",
+      headers: authorization,
+    });
+    expect(logs.statusCode).toBe(200);
+    expect(logs.body).toContain("test.failure");
+    expect(logs.body).toContain("[REDACTED]");
+    expect(logs.body).not.toContain("secret-value");
+
+    const usage = await app.inject({
+      method: "GET",
+      url: "/api/v1/admin/usage",
+      headers: authorization,
+    });
+    expect(usage.statusCode).toBe(200);
+    expect(usage.json().data.summary).toMatchObject({
+      requests: 0,
+      estimatedCostUsd: 0,
+    });
   });
 
   it("creates, commits, reads revisions, and rejects stale writes", async () => {
@@ -153,6 +220,54 @@ describe("HTTP control plane", () => {
     expect(searched.statusCode).toBe(200);
     expect(searched.json().data).toHaveLength(1);
     expect(searched.json().data[0].id).toBe(assetId);
+  });
+
+  it("uploads a browser-selected file as a managed project asset", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      headers: authorization,
+      payload: { name: "Browser upload" },
+    });
+    const projectId = String(created.json().data.projectId);
+    const boundary = "frameos-browser-upload-boundary";
+    const media = "WEBVTT\n\n00:00.000 --> 00:01.000\nUploaded caption\n";
+    const multipartBody = Buffer.from(
+      [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="file"; filename="selected-captions.vtt"',
+        "Content-Type: text/vtt",
+        "",
+        media,
+        `--${boundary}--`,
+        "",
+      ].join("\r\n"),
+    );
+    const uploaded = await app.inject({
+      method: "POST",
+      url: `/api/v1/assets/uploads?projectId=${projectId}&baseRevision=0&kind=subtitle`,
+      headers: {
+        ...authorization,
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+      },
+      payload: multipartBody,
+    });
+
+    expect(uploaded.statusCode).toBe(201);
+    expect(uploaded.json().data.asset).toMatchObject({
+      name: "selected-captions.vtt",
+      kind: "subtitle",
+      managed: true,
+    });
+    expect(uploaded.json().data.asset.uri).toMatch(/^frameos:/u);
+    const managedPath = services.projects.resolveProjectUri(
+      projectId,
+      String(uploaded.json().data.asset.uri),
+    );
+    expect((await stat(managedPath)).isFile()).toBe(true);
+    expect(
+      await readdir(resolve(services.config.dataDirectory, "uploads")),
+    ).toEqual([]);
   });
 
   it("imports and exports captions through revision-safe REST contracts", async () => {
@@ -312,6 +427,35 @@ describe("HTTP control plane", () => {
       semanticOperation: "semantic.remove_silences",
       operations: [],
     });
+    const highlight = await app.inject({
+      method: "POST",
+      url: "/api/v1/semantic/create-highlight/plan",
+      headers: authorization,
+      payload: {
+        projectId: project.projectId,
+        baseRevision: 0,
+        sourceTrackIds: [trackId],
+        types: ["quality"],
+      },
+    });
+    expect(highlight.statusCode).toBe(200);
+    expect(highlight.json().data).toMatchObject({
+      projectId: project.projectId,
+      baseRevision: 0,
+      semanticOperation: "semantic.create_highlight",
+      operations: [],
+    });
+    const broll = await app.inject({
+      method: "POST",
+      url: "/api/v1/semantic/sync-broll/plan",
+      headers: authorization,
+      payload: {
+        projectId: project.projectId,
+        baseRevision: 0,
+        targetClipIds: [],
+      },
+    });
+    expect(broll.statusCode).toBe(422);
     expect((await services.projects.load(project.projectId)).revision).toBe(0);
   });
 

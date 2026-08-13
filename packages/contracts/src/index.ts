@@ -9,6 +9,7 @@ export * from "./interchange.js";
 export * from "./jobs.js";
 export * from "./operations.js";
 export * from "./project.js";
+export * from "./project-migrations.js";
 export * from "./semantic.js";
 export * from "./previews.js";
 export * from "./time.js";

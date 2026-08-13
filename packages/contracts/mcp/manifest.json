@@ -24,6 +24,8 @@
     "semantic.make_vertical.plan",
     "semantic.match_cuts_to_music.plan",
     "semantic.add_dynamic_captions.plan",
+    "semantic.create_highlight.plan",
+    "semantic.sync_broll.plan",
     "transaction.create",
     "transaction.apply",
     "transaction.validate",

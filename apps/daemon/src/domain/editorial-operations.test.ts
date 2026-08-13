@@ -428,4 +428,204 @@ describe("advanced editorial operations", () => {
     ]!.tracks.find((track) => track.id === rampContext.track.id)!.items[0];
     expect(rampedResult?.timelineRange.duration.value).toBe(15);
   });
+
+  it("splits retimed clips while preserving local time-map boundaries", () => {
+    const trimContext = fixture();
+    const trimmedClip = clip(trimContext, 0, 20, 100);
+    trimmedClip.sourceRange.duration = frameTime(40, {
+      numerator: 30,
+      denominator: 1,
+    });
+    trimmedClip.timeMap = [
+      {
+        id: createId(),
+        time: frameTime(0, { numerator: 30, denominator: 1 }),
+        value: 100,
+        interpolation: "linear",
+      },
+      {
+        id: createId(),
+        time: frameTime(20, { numerator: 30, denominator: 1 }),
+        value: 140,
+        interpolation: "linear",
+      },
+    ];
+    trimContext.track.items.push(trimmedClip);
+    const trimBoundaryId = createId();
+    const trimmed = executeAndRestore(trimContext.project, {
+      operationId: createId(),
+      type: "clip.trim",
+      targetId: trimmedClip.id,
+      preconditions: [],
+      arguments: {
+        sequenceId: trimContext.project.settings.defaultSequenceId,
+        trackId: trimContext.track.id,
+        sourceRange: {
+          start: frameTime(116, { numerator: 30, denominator: 1 }),
+          duration: frameTime(24, { numerator: 30, denominator: 1 }),
+        },
+        retimeStartKeyframeId: trimBoundaryId,
+      },
+    });
+    const trimmedItem = trimmed.project.sequences[
+      trimmed.project.settings.defaultSequenceId
+    ]!.tracks.find((track) => track.id === trimContext.track.id)!.items[0];
+    expect(trimmedItem?.timelineRange.duration.value).toBe(12);
+    expect(
+      trimmedItem?.type === "clip" ? trimmedItem.timeMap : [],
+    ).toMatchObject([
+      { id: trimBoundaryId, time: { value: 0 }, value: 116 },
+      { time: { value: 12 }, value: 140 },
+    ]);
+
+    const context = fixture();
+    const retimed = clip(context, 0, 20, 100);
+    retimed.sourceRange.duration = frameTime(40, {
+      numerator: 30,
+      denominator: 1,
+    });
+    retimed.timeMap = [
+      {
+        id: createId(),
+        time: frameTime(0, { numerator: 30, denominator: 1 }),
+        value: 100,
+        interpolation: "linear",
+      },
+      {
+        id: createId(),
+        time: frameTime(20, { numerator: 30, denominator: 1 }),
+        value: 140,
+        interpolation: "linear",
+      },
+    ];
+    context.track.items.push(retimed);
+    const leftBoundaryId = createId();
+    const rightBoundaryId = createId();
+    const rightClipId = createId();
+    const result = executeAndRestore(context.project, {
+      operationId: createId(),
+      type: "clip.split",
+      targetId: retimed.id,
+      preconditions: [],
+      arguments: {
+        sequenceId: context.project.settings.defaultSequenceId,
+        trackId: context.track.id,
+        at: frameTime(8, { numerator: 30, denominator: 1 }),
+        rightClipId,
+        leftEndKeyframeId: leftBoundaryId,
+        rightStartKeyframeId: rightBoundaryId,
+      },
+    });
+    const items = result.project.sequences[
+      result.project.settings.defaultSequenceId
+    ]!.tracks.find((track) => track.id === context.track.id)!.items;
+    const left = items.find((item) => item.id === retimed.id);
+    const right = items.find((item) => item.id === rightClipId);
+    expect(left?.timelineRange.duration.value).toBe(8);
+    expect(right?.timelineRange).toMatchObject({
+      start: { value: 8 },
+      duration: { value: 12 },
+    });
+    expect(left?.type === "clip" ? left.timeMap : []).toMatchObject([
+      { time: { value: 0 }, value: 100 },
+      { id: leftBoundaryId, time: { value: 8 }, value: 116 },
+    ]);
+    expect(right?.type === "clip" ? right.timeMap : []).toMatchObject([
+      { id: rightBoundaryId, time: { value: 0 }, value: 116 },
+      { time: { value: 12 }, value: 140 },
+    ]);
+
+    const exactContext = fixture();
+    const exact = clip(exactContext, 0, 20, 100);
+    const exactBoundaryId = createId();
+    exact.timeMap = [
+      {
+        id: createId(),
+        time: frameTime(0, { numerator: 30, denominator: 1 }),
+        value: 100,
+        interpolation: "linear",
+      },
+      {
+        id: createId(),
+        time: frameTime(10, { numerator: 30, denominator: 1 }),
+        value: 120,
+        interpolation: "hold",
+      },
+      {
+        id: createId(),
+        time: frameTime(20, { numerator: 30, denominator: 1 }),
+        value: 120,
+        interpolation: "hold",
+      },
+    ];
+    exactContext.track.items.push(exact);
+    const exactSplit = executeAndRestore(exactContext.project, {
+      operationId: createId(),
+      type: "clip.split",
+      targetId: exact.id,
+      preconditions: [],
+      arguments: {
+        sequenceId: exactContext.project.settings.defaultSequenceId,
+        trackId: exactContext.track.id,
+        at: frameTime(10, { numerator: 30, denominator: 1 }),
+        rightClipId: createId(),
+        rightStartKeyframeId: exactBoundaryId,
+      },
+    });
+    const exactItems = exactSplit.project.sequences[
+      exactSplit.project.settings.defaultSequenceId
+    ]!.tracks.find((track) => track.id === exactContext.track.id)!.items;
+    expect(
+      exactItems[1]?.type === "clip" ? exactItems[1].timeMap[0]?.id : "",
+    ).toBe(exactBoundaryId);
+    expect(
+      exactItems[1]?.type === "clip"
+        ? exactItems[1].timeMap[0]?.time.value
+        : -1,
+    ).toBe(0);
+
+    const slipContext = fixture();
+    const slippedClip = clip(slipContext, 0, 20, 100);
+    slippedClip.sourceRange.duration = frameTime(40, {
+      numerator: 30,
+      denominator: 1,
+    });
+    slippedClip.timeMap = [
+      {
+        id: createId(),
+        time: frameTime(0, { numerator: 30, denominator: 1 }),
+        value: 100,
+        interpolation: "linear",
+      },
+      {
+        id: createId(),
+        time: frameTime(20, { numerator: 30, denominator: 1 }),
+        value: 140,
+        interpolation: "linear",
+      },
+    ];
+    slipContext.track.items.push(slippedClip);
+    const slipped = executeAndRestore(slipContext.project, {
+      operationId: createId(),
+      type: "clip.slip",
+      targetId: slippedClip.id,
+      preconditions: [],
+      arguments: {
+        sequenceId: slipContext.project.settings.defaultSequenceId,
+        trackId: slipContext.track.id,
+        sourceStart: frameTime(120, { numerator: 30, denominator: 1 }),
+      },
+    });
+    const slippedItem = slipped.project.sequences[
+      slipped.project.settings.defaultSequenceId
+    ]!.tracks.find((track) => track.id === slipContext.track.id)!.items[0];
+    expect(
+      slippedItem?.type === "clip" ? slippedItem.sourceRange.start.value : -1,
+    ).toBe(120);
+    expect(
+      slippedItem?.type === "clip"
+        ? slippedItem.timeMap.map((keyframe) => keyframe.value)
+        : [],
+    ).toEqual([120, 160]);
+  });
 });

@@ -577,6 +577,11 @@ export class AgentService {
       run.projectId,
     );
     run = this.database.updateAgentRun(run.id, { state: "planning" });
+    this.events.publish(
+      "agent.provider.request.started",
+      { runId: run.id, provider: session.provider, model: session.model },
+      run.projectId,
+    );
     try {
       const provider = this.providers.get(session.provider, session.model);
       const [capabilities, operationCatalog, analysisResults] =
@@ -612,6 +617,65 @@ export class AgentService {
           labels: result.labels,
         })),
       });
+      if (result.usage !== undefined) {
+        const usage = this.database.recordProviderUsage({
+          sessionId: session.id,
+          runId: run.id,
+          projectId: run.projectId,
+          provider: session.provider,
+          model: session.model,
+          operation: "edit.plan",
+          ...result.usage,
+          ...(result.responseId === undefined
+            ? {}
+            : { providerResponseId: result.responseId }),
+        });
+        const sessionUsage = this.database.summarizeProviderUsage({
+          sessionId: session.id,
+        });
+        this.events.publish(
+          "agent.provider.request.completed",
+          {
+            runId: run.id,
+            provider: session.provider,
+            model: session.model,
+            usage,
+            sessionEstimatedCostUsd: sessionUsage.estimatedCostUsd,
+          },
+          run.projectId,
+        );
+        if (
+          session.budgets.maxProviderCostUsd !== undefined &&
+          sessionUsage.unpricedRequests > 0
+        ) {
+          throw new FrameOSError(
+            "RESOURCE_LIMIT",
+            `Agent provider cost budget cannot be enforced because ${sessionUsage.unpricedRequests.toString()} request(s) use an unpriced model`,
+            422,
+          );
+        }
+        if (
+          session.budgets.maxProviderCostUsd !== undefined &&
+          sessionUsage.estimatedCostUsd > session.budgets.maxProviderCostUsd
+        ) {
+          throw new FrameOSError(
+            "RESOURCE_LIMIT",
+            `Agent provider cost $${sessionUsage.estimatedCostUsd.toFixed(6)} exceeds the session budget of $${session.budgets.maxProviderCostUsd.toFixed(6)}`,
+            422,
+          );
+        }
+      } else {
+        this.events.publish(
+          "agent.provider.request.completed",
+          {
+            runId: run.id,
+            provider: session.provider,
+            model: session.model,
+            usage: null,
+          },
+          run.projectId,
+        );
+      }
       const state = result.plan.clarificationRequired
         ? "awaiting_clarification"
         : "planned";
@@ -641,6 +705,17 @@ export class AgentService {
       this.events.publish(
         "agent.run.failed",
         { runId: run.id, code, message },
+        run.projectId,
+      );
+      this.events.publish(
+        "agent.provider.request.failed",
+        {
+          runId: run.id,
+          provider: session.provider,
+          model: session.model,
+          code,
+          message,
+        },
         run.projectId,
       );
       throw error;

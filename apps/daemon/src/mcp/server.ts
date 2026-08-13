@@ -22,6 +22,8 @@ import {
   previewSourceSchema,
   rationalTimeSchema,
   semanticAddDynamicCaptionsRequestSchema,
+  semanticCreateHighlightRequestSchema,
+  semanticSyncBrollRequestSchema,
   timeRangeSchema,
   transactionRequestSchema,
   type FrameOSErrorBody,
@@ -529,6 +531,40 @@ export function createMcpServer(services: FrameOSServices): McpServer {
       },
     },
     (input) => guarded(() => services.semantic.planAddDynamicCaptions(input)),
+  );
+
+  server.registerTool(
+    "semantic.create_highlight.plan",
+    {
+      title: "Plan highlight assembly",
+      description:
+        "Rank indexed scene, shot, or quality ranges and compile a non-mutating highlight assembly into ordinary track and clip operations.",
+      inputSchema: semanticCreateHighlightRequestSchema,
+      outputSchema: toolOutputSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    (input) => guarded(() => services.semantic.planCreateHighlight(input)),
+  );
+
+  server.registerTool(
+    "semantic.sync_broll.plan",
+    {
+      title: "Plan synchronized B-roll",
+      description:
+        "Pair target transcript/scene ranges with ranked B-roll source ranges and compile non-mutating overlay operations.",
+      inputSchema: semanticSyncBrollRequestSchema,
+      outputSchema: toolOutputSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    (input) => guarded(() => services.semantic.planSyncBroll(input)),
   );
 
   server.registerTool(

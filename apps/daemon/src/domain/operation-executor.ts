@@ -7,10 +7,12 @@ import {
   rescaleTime,
   sameRate,
   type Change,
+  type Clip,
   type EffectInstance,
   type Operation,
   type Project,
   type RationalRate,
+  type RationalTime,
   type TimeRange,
   type TimelineItem,
   type Track,
@@ -484,6 +486,373 @@ function itemFrames(
     duration: duration.time.value,
     end: start.time.value + duration.time.value,
   };
+}
+
+type TimeMapKeyframe = Clip["timeMap"][number];
+
+interface RetimedKeyframeFrame {
+  keyframe: TimeMapKeyframe;
+  frame: number;
+  value: number;
+}
+
+function numericTimeMapValue(clip: Clip, keyframe: TimeMapKeyframe): number {
+  if (typeof keyframe.value !== "number" || !Number.isFinite(keyframe.value)) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} time-map values must be finite source-frame numbers`,
+      422,
+    );
+  }
+  return keyframe.value;
+}
+
+function retimedKeyframeFrames(
+  clip: Clip,
+  rate: RationalRate,
+): RetimedKeyframeFrame[] {
+  const frames = itemFrames(clip, rate);
+  const keyframes = clip.timeMap.map((keyframe) => {
+    const rescaled = rescaleTime(keyframe.time, rate);
+    if (rescaled.rounded) {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        `Clip ${clip.id} time-map keyframe is not aligned to the sequence rate`,
+        422,
+      );
+    }
+    return {
+      keyframe,
+      frame: rescaled.time.value,
+      value: numericTimeMapValue(clip, keyframe),
+    };
+  });
+  if (
+    keyframes.length < 2 ||
+    keyframes[0]?.frame !== 0 ||
+    keyframes.at(-1)?.frame !== frames.duration
+  ) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} time-map must span local frame 0 through its duration`,
+      422,
+    );
+  }
+  return keyframes;
+}
+
+function sampleRetimedValue(
+  clip: Clip,
+  left: RetimedKeyframeFrame,
+  right: RetimedKeyframeFrame,
+  frame: number,
+): number {
+  if (left.keyframe.interpolation === "hold") return left.value;
+  if (left.keyframe.interpolation !== "linear") {
+    throw new FrameOSError(
+      "CAPABILITY_UNAVAILABLE",
+      `Split inside ${left.keyframe.interpolation} retime curves is not implemented`,
+      424,
+    );
+  }
+  const span = right.frame - left.frame;
+  if (span <= 0) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Clip ${clip.id} time-map keyframes must be strictly ordered`,
+      422,
+    );
+  }
+  const progress = (frame - left.frame) / span;
+  return left.value + (right.value - left.value) * progress;
+}
+
+function shiftedKeyframe(
+  keyframe: TimeMapKeyframe,
+  frame: number,
+  rate: RationalRate,
+  id = keyframe.id,
+): TimeMapKeyframe {
+  return {
+    ...structuredClone(keyframe),
+    id,
+    time: frameTime(frame, rate),
+  };
+}
+
+function splitRetimedTimeMap(
+  clip: Clip,
+  offset: number,
+  rate: RationalRate,
+  leftEndKeyframeId: string | undefined,
+  rightStartKeyframeId: string | undefined,
+): { left: TimeMapKeyframe[]; right: TimeMapKeyframe[] } {
+  if (rightStartKeyframeId === undefined) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Splitting a retimed clip requires rightStartKeyframeId",
+      422,
+    );
+  }
+  const keyframes = retimedKeyframeFrames(clip, rate);
+  const exact = keyframes.find((keyframe) => keyframe.frame === offset);
+  if (exact !== undefined) {
+    return {
+      left: keyframes
+        .filter((keyframe) => keyframe.frame <= offset)
+        .map((keyframe) =>
+          shiftedKeyframe(keyframe.keyframe, keyframe.frame, rate),
+        ),
+      right: [
+        shiftedKeyframe(exact.keyframe, 0, rate, rightStartKeyframeId),
+        ...keyframes
+          .filter((keyframe) => keyframe.frame > offset)
+          .map((keyframe) =>
+            shiftedKeyframe(keyframe.keyframe, keyframe.frame - offset, rate),
+          ),
+      ],
+    };
+  }
+  if (leftEndKeyframeId === undefined) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Splitting between retime keyframes requires leftEndKeyframeId",
+      422,
+    );
+  }
+  const segmentIndex = keyframes.findIndex((keyframe, index) => {
+    const next = keyframes[index + 1];
+    return next !== undefined && keyframe.frame < offset && offset < next.frame;
+  });
+  const left = keyframes[segmentIndex];
+  const right = keyframes[segmentIndex + 1];
+  if (left === undefined || right === undefined) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Split frame ${offset} is outside clip ${clip.id} time-map range`,
+      422,
+    );
+  }
+  const boundaryValue = sampleRetimedValue(clip, left, right, offset);
+  const boundary: TimeMapKeyframe = {
+    ...structuredClone(left.keyframe),
+    id: leftEndKeyframeId,
+    time: frameTime(offset, rate),
+    value: boundaryValue,
+  };
+  const rightBoundary: TimeMapKeyframe = {
+    ...structuredClone(boundary),
+    id: rightStartKeyframeId,
+    time: frameTime(0, rate),
+  };
+  return {
+    left: [
+      ...keyframes
+        .filter((keyframe) => keyframe.frame < offset)
+        .map((keyframe) =>
+          shiftedKeyframe(keyframe.keyframe, keyframe.frame, rate),
+        ),
+      boundary,
+    ],
+    right: [
+      rightBoundary,
+      ...keyframes
+        .filter((keyframe) => keyframe.frame > offset)
+        .map((keyframe) =>
+          shiftedKeyframe(keyframe.keyframe, keyframe.frame - offset, rate),
+        ),
+    ],
+  };
+}
+
+function sourceRangeEndFrames(clip: Clip, sourceRange: TimeRange): number {
+  const duration = rescaleTime(
+    sourceRange.duration,
+    clip.sourceRange.start.rate,
+  );
+  if (duration.rounded) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Retimed clip ${clip.id} source-range duration is not aligned to the clip source rate`,
+      422,
+    );
+  }
+  return sourceRange.start.value + duration.time.value;
+}
+
+function assertNonDescendingTimeMap(
+  clip: Clip,
+  keyframes: RetimedKeyframeFrame[],
+): void {
+  for (let index = 1; index < keyframes.length; index += 1) {
+    if (keyframes[index]!.value < keyframes[index - 1]!.value) {
+      throw new FrameOSError(
+        "CAPABILITY_UNAVAILABLE",
+        `Trim of descending retime maps is not implemented for clip ${clip.id}`,
+        424,
+      );
+    }
+  }
+}
+
+function locateRetimeBoundary(
+  clip: Clip,
+  keyframes: RetimedKeyframeFrame[],
+  sourceValue: number,
+): { frame: number; keyframe?: TimeMapKeyframe } {
+  const exact = keyframes.find(
+    (keyframe) => Math.abs(keyframe.value - sourceValue) < Number.EPSILON,
+  );
+  if (exact !== undefined) {
+    return { frame: exact.frame, keyframe: exact.keyframe };
+  }
+  for (let index = 0; index < keyframes.length - 1; index += 1) {
+    const left = keyframes[index]!;
+    const right = keyframes[index + 1]!;
+    if (left.value > sourceValue || right.value < sourceValue) continue;
+    if (left.keyframe.interpolation !== "linear") {
+      throw new FrameOSError(
+        "CAPABILITY_UNAVAILABLE",
+        `Trim inside ${left.keyframe.interpolation} retime curves is not implemented`,
+        424,
+      );
+    }
+    if (right.value === left.value) continue;
+    const progress = (sourceValue - left.value) / (right.value - left.value);
+    const frame = left.frame + progress * (right.frame - left.frame);
+    const rounded = Math.round(frame);
+    if (Math.abs(frame - rounded) > Number.EPSILON) {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        `Retimed trim boundary for clip ${clip.id} is not frame aligned`,
+        422,
+      );
+    }
+    return { frame: rounded };
+  }
+  throw new FrameOSError(
+    "VALIDATION_ERROR",
+    `Retimed trim boundary ${sourceValue} is outside clip ${clip.id} time map`,
+    422,
+  );
+}
+
+function trimRetimedTimeMap(
+  clip: Clip,
+  sourceRange: TimeRange,
+  rate: RationalRate,
+  startKeyframeId: string | undefined,
+  endKeyframeId: string | undefined,
+): { duration: number; timeMap: TimeMapKeyframe[] } {
+  const keyframes = retimedKeyframeFrames(clip, rate);
+  assertNonDescendingTimeMap(clip, keyframes);
+  const sourceStart = sourceRange.start.value;
+  const sourceEnd = sourceRangeEndFrames(clip, sourceRange);
+  if (sourceEnd <= sourceStart) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Retimed trim source range must have positive duration",
+      422,
+    );
+  }
+  const start = locateRetimeBoundary(clip, keyframes, sourceStart);
+  const end = locateRetimeBoundary(clip, keyframes, sourceEnd);
+  if (end.frame <= start.frame) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Retimed trim source range does not map to a positive timeline duration",
+      422,
+    );
+  }
+  if (start.keyframe === undefined && startKeyframeId === undefined) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Retimed trim start requires retimeStartKeyframeId",
+      422,
+    );
+  }
+  if (end.keyframe === undefined && endKeyframeId === undefined) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Retimed trim end requires retimeEndKeyframeId",
+      422,
+    );
+  }
+  const startKeyframe: TimeMapKeyframe =
+    start.keyframe === undefined
+      ? {
+          ...structuredClone(
+            keyframes.find((keyframe, index) => {
+              const next = keyframes[index + 1];
+              return (
+                next !== undefined &&
+                keyframe.frame < start.frame &&
+                start.frame < next.frame
+              );
+            })!.keyframe,
+          ),
+          id: startKeyframeId!,
+          time: frameTime(0, rate),
+          value: sourceStart,
+        }
+      : shiftedKeyframe(start.keyframe, 0, rate);
+  const endKeyframe: TimeMapKeyframe =
+    end.keyframe === undefined
+      ? {
+          ...structuredClone(
+            keyframes.find((keyframe, index) => {
+              const next = keyframes[index + 1];
+              return (
+                next !== undefined &&
+                keyframe.frame < end.frame &&
+                end.frame < next.frame
+              );
+            })!.keyframe,
+          ),
+          id: endKeyframeId!,
+          time: frameTime(end.frame - start.frame, rate),
+          value: sourceEnd,
+        }
+      : shiftedKeyframe(end.keyframe, end.frame - start.frame, rate);
+  const middle = keyframes
+    .filter(
+      (keyframe) => keyframe.frame > start.frame && keyframe.frame < end.frame,
+    )
+    .map((keyframe) =>
+      shiftedKeyframe(keyframe.keyframe, keyframe.frame - start.frame, rate),
+    );
+  return {
+    duration: end.frame - start.frame,
+    timeMap: [startKeyframe, ...middle, endKeyframe],
+  };
+}
+
+function slipRetimedClip(clip: Clip, sourceStart: RationalTime): void {
+  const rescaledStart = rescaleTime(sourceStart, clip.sourceRange.start.rate);
+  if (rescaledStart.rounded) {
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      `Retimed slip source start is not aligned to clip ${clip.id}'s source rate`,
+      422,
+    );
+  }
+  const delta = rescaledStart.time.value - clip.sourceRange.start.value;
+  const shifted = clip.timeMap.map((keyframe) => {
+    const value = numericTimeMapValue(clip, keyframe) + delta;
+    if (value < 0) {
+      throw new FrameOSError(
+        "VALIDATION_ERROR",
+        `Slip would move retime keyframe ${keyframe.id} before the asset start`,
+        422,
+      );
+    }
+    return {
+      ...structuredClone(keyframe),
+      value,
+    };
+  });
+  clip.sourceRange.start = rescaledStart.time;
+  clip.timeMap = shifted;
 }
 
 function setEditorialRange(
@@ -1934,20 +2303,50 @@ function applyOne(
           422,
         );
       }
-      if (located.item.timeMap.length > 0) {
-        throw new FrameOSError(
-          "CAPABILITY_UNAVAILABLE",
-          "Trim of a retimed clip is not implemented",
-          424,
-        );
-      }
       const previous = structuredClone(located.item.sourceRange);
+      const previousItem = structuredClone(located.item);
       const previousTimeline = structuredClone(located.item.timelineRange);
-      located.item.sourceRange = operation.arguments.sourceRange;
-      located.item.timelineRange.duration = rescaleTime(
-        operation.arguments.sourceRange.duration,
-        located.item.timelineRange.duration.rate,
-      ).time;
+      if (located.item.timeMap.length > 0) {
+        const newBoundaryIds = [
+          operation.arguments.retimeStartKeyframeId,
+          operation.arguments.retimeEndKeyframeId,
+        ].filter((id): id is string => id !== undefined);
+        if (new Set(newBoundaryIds).size !== newBoundaryIds.length) {
+          throw new FrameOSError(
+            "VALIDATION_ERROR",
+            "Retimed trim boundary keyframe IDs must be unique",
+            422,
+          );
+        }
+        for (const id of newBoundaryIds) {
+          if (entityExists(project, id)) {
+            throw new FrameOSError(
+              "VALIDATION_ERROR",
+              `Entity ${id} already exists`,
+              422,
+            );
+          }
+        }
+        const trimmed = trimRetimedTimeMap(
+          located.item,
+          operation.arguments.sourceRange,
+          located.item.timelineRange.start.rate,
+          operation.arguments.retimeStartKeyframeId,
+          operation.arguments.retimeEndKeyframeId,
+        );
+        located.item.sourceRange = operation.arguments.sourceRange;
+        located.item.timelineRange.duration = frameTime(
+          trimmed.duration,
+          located.item.timelineRange.duration.rate,
+        );
+        located.item.timeMap = trimmed.timeMap;
+      } else {
+        located.item.sourceRange = operation.arguments.sourceRange;
+        located.item.timelineRange.duration = rescaleTime(
+          operation.arguments.sourceRange.duration,
+          located.item.timelineRange.duration.rate,
+        ).time;
+      }
       return {
         change: makeChange(
           operation,
@@ -1955,11 +2354,24 @@ function applyOne(
           `Trimmed clip ${located.item.name}`,
         ),
         ranges: [previousTimeline, located.item.timelineRange],
-        inverse: {
-          ...cloneOperation(operation),
-          operationId: createId(),
-          arguments: { ...operation.arguments, sourceRange: previous },
-        },
+        inverse:
+          previousItem.timeMap.length > 0
+            ? {
+                operationId: createId(),
+                type: "item.replace",
+                targetId: located.item.id,
+                preconditions: [],
+                arguments: {
+                  sequenceId: located.sequence.id,
+                  trackId: located.track.id,
+                  item: previousItem,
+                },
+              }
+            : {
+                ...cloneOperation(operation),
+                operationId: createId(),
+                arguments: { ...operation.arguments, sourceRange: previous },
+              },
       };
     }
     case "clip.split": {
@@ -1992,13 +2404,6 @@ function applyOne(
           422,
         );
       }
-      if (located.item.timeMap.length > 0) {
-        throw new FrameOSError(
-          "CAPABILITY_UNAVAILABLE",
-          "Split of a retimed clip is not implemented",
-          424,
-        );
-      }
       if (entityExists(project, operation.arguments.rightClipId)) {
         throw new FrameOSError(
           "VALIDATION_ERROR",
@@ -2006,26 +2411,64 @@ function applyOne(
           422,
         );
       }
+      const newBoundaryIds = [
+        operation.arguments.leftEndKeyframeId,
+        operation.arguments.rightStartKeyframeId,
+      ].filter((id): id is string => id !== undefined);
+      if (new Set(newBoundaryIds).size !== newBoundaryIds.length) {
+        throw new FrameOSError(
+          "VALIDATION_ERROR",
+          "Retimed split boundary keyframe IDs must be unique",
+          422,
+        );
+      }
+      for (const id of newBoundaryIds) {
+        if (entityExists(project, id)) {
+          throw new FrameOSError(
+            "VALIDATION_ERROR",
+            `Entity ${id} already exists`,
+            422,
+          );
+        }
+      }
       const original = structuredClone(located.item);
+      const retimedSplit =
+        located.item.timeMap.length > 0
+          ? splitRetimedTimeMap(
+              located.item,
+              offset,
+              located.item.timelineRange.start.rate,
+              operation.arguments.leftEndKeyframeId,
+              operation.arguments.rightStartKeyframeId,
+            )
+          : undefined;
       const right = structuredClone(located.item);
       right.id = operation.arguments.rightClipId;
       right.name = `${right.name} (right)`;
       right.timelineRange.start = operation.arguments.at;
       right.timelineRange.duration.value -= offset;
-      const sourceOffset = rescaleTime(
-        { value: offset, rate: located.item.timelineRange.start.rate },
-        right.sourceRange.start.rate,
-      ).time;
-      right.sourceRange.start = addTime(right.sourceRange.start, sourceOffset);
-      right.sourceRange.duration = rescaleTime(
-        right.timelineRange.duration,
-        right.sourceRange.duration.rate,
-      ).time;
       located.item.timelineRange.duration.value = offset;
-      located.item.sourceRange.duration = rescaleTime(
-        located.item.timelineRange.duration,
-        located.item.sourceRange.duration.rate,
-      ).time;
+      if (retimedSplit !== undefined) {
+        located.item.timeMap = retimedSplit.left;
+        right.timeMap = retimedSplit.right;
+      } else {
+        const sourceOffset = rescaleTime(
+          { value: offset, rate: located.item.timelineRange.start.rate },
+          right.sourceRange.start.rate,
+        ).time;
+        right.sourceRange.start = addTime(
+          right.sourceRange.start,
+          sourceOffset,
+        );
+        right.sourceRange.duration = rescaleTime(
+          right.timelineRange.duration,
+          right.sourceRange.duration.rate,
+        ).time;
+        located.item.sourceRange.duration = rescaleTime(
+          located.item.timelineRange.duration,
+          located.item.sourceRange.duration.rate,
+        ).time;
+      }
       located.track.items.splice(located.index + 1, 0, right);
       return {
         change: makeChange(
@@ -2483,15 +2926,12 @@ function applyOne(
         operation.arguments.trackId,
         operation.targetId,
       );
-      if (located.item.timeMap.length > 0) {
-        throw new FrameOSError(
-          "CAPABILITY_UNAVAILABLE",
-          "Slip edit of a retimed clip is not implemented",
-          424,
-        );
-      }
       const previous = structuredClone(located.item);
-      located.item.sourceRange.start = operation.arguments.sourceStart;
+      if (located.item.timeMap.length > 0) {
+        slipRetimedClip(located.item, operation.arguments.sourceStart);
+      } else {
+        located.item.sourceRange.start = operation.arguments.sourceStart;
+      }
       return {
         change: makeChange(
           operation,

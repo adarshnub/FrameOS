@@ -596,6 +596,8 @@ export const clipTrimOperationSchema = z
         sequenceId: entityIdSchema,
         trackId: entityIdSchema,
         sourceRange: timeRangeSchema,
+        retimeStartKeyframeId: entityIdSchema.optional(),
+        retimeEndKeyframeId: entityIdSchema.optional(),
       })
       .strict(),
   })
@@ -612,6 +614,8 @@ export const clipSplitOperationSchema = z
         trackId: entityIdSchema,
         at: rationalTimeSchema,
         rightClipId: entityIdSchema,
+        leftEndKeyframeId: entityIdSchema.optional(),
+        rightStartKeyframeId: entityIdSchema.optional(),
       })
       .strict(),
   })
