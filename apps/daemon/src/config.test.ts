@@ -54,6 +54,26 @@ describe("daemon configuration", () => {
     ]);
   });
 
+  it("allows a Docker-local wildcard bind without remote TLS requirements", async () => {
+    const config = await loadConfig({
+      FRAMEOS_DATA_DIR: await dataDirectory(),
+      FRAMEOS_HOST: "0.0.0.0",
+      FRAMEOS_DOCKER_LOCAL_ONLY: "true",
+    });
+
+    expect(config.remoteMode).toBe(false);
+  });
+
+  it("limits Docker-local mode to the wildcard bind used by Compose", async () => {
+    await expect(
+      loadConfig({
+        FRAMEOS_DATA_DIR: await dataDirectory(),
+        FRAMEOS_HOST: "192.168.1.10",
+        FRAMEOS_DOCKER_LOCAL_ONLY: "true",
+      }),
+    ).rejects.toThrow("FRAMEOS_DOCKER_LOCAL_ONLY requires FRAMEOS_HOST=0.0.0.0");
+  });
+
   it("resolves explicitly configured analyzer manifests", async () => {
     const root = await dataDirectory();
     const config = await loadConfig({

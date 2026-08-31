@@ -895,11 +895,44 @@ export async function buildHttpServer(
       ...(projectId === undefined ? {} : { projectId }),
       ...(sessionId === undefined ? {} : { sessionId }),
     };
-    const records = services.database.listProviderUsage(filter);
-    return successEnvelope(
-      { summary: services.database.summarizeProviderUsage(filter), records },
-      { total: records.length },
-    );
+    const agentRecords = services.database.listProviderUsage(filter);
+    const analysisRecords =
+      sessionId === undefined
+        ? services.database.listAnalysisUsage(
+            projectId === undefined ? {} : { projectId },
+          )
+        : [];
+    const records = [...agentRecords, ...analysisRecords]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, 2_000);
+    const agentSummary = services.database.summarizeProviderUsage(filter);
+    const analysisSummary =
+      sessionId === undefined
+        ? services.database.summarizeAnalysisUsage(
+            projectId === undefined ? {} : { projectId },
+          )
+        : {
+            requests: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            estimatedCostUsd: 0,
+            unpricedRequests: 0,
+          };
+    const summary = {
+      requests: agentSummary.requests + analysisSummary.requests,
+      inputTokens: agentSummary.inputTokens + analysisSummary.inputTokens,
+      cachedInputTokens:
+        agentSummary.cachedInputTokens + analysisSummary.cachedInputTokens,
+      outputTokens: agentSummary.outputTokens + analysisSummary.outputTokens,
+      totalTokens: agentSummary.totalTokens + analysisSummary.totalTokens,
+      estimatedCostUsd:
+        agentSummary.estimatedCostUsd + analysisSummary.estimatedCostUsd,
+      unpricedRequests:
+        agentSummary.unpricedRequests + analysisSummary.unpricedRequests,
+    };
+    return successEnvelope({ summary, records }, { total: records.length });
   });
 
   app.get("/api/v1/admin/logs/stream", { websocket: true }, (socket) => {

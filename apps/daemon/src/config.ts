@@ -218,7 +218,13 @@ export async function loadConfig(
   );
   await mkdir(dataDirectory, { recursive: true });
   const host = environment.FRAMEOS_HOST ?? "127.0.0.1";
-  const remoteMode = !isLoopbackHost(host);
+  const dockerLocalOnly = environment.FRAMEOS_DOCKER_LOCAL_ONLY === "true";
+  if (dockerLocalOnly && host !== "0.0.0.0") {
+    throw new Error(
+      "FRAMEOS_DOCKER_LOCAL_ONLY requires FRAMEOS_HOST=0.0.0.0",
+    );
+  }
+  const remoteMode = !isLoopbackHost(host) && !dockerLocalOnly;
   if (isIP(host) === 0 && host !== "localhost") {
     throw new Error("FRAMEOS_HOST must be localhost or a literal IP address");
   }

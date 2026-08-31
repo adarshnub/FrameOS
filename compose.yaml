@@ -1,0 +1,28 @@
+services:
+  frameos-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:31415:31415"
+    env_file:
+      - .env
+    environment:
+      # The host port is explicitly bound to 127.0.0.1 above, so this
+      # container-only wildcard bind is not a public remote deployment.
+      FRAMEOS_HOST: 0.0.0.0
+      FRAMEOS_DOCKER_LOCAL_ONLY: "true"
+      FRAMEOS_DATA_DIR: /app/.frameos-data
+      # Host Windows paths from .env are not valid inside the Linux container.
+      # Managed uploads are persisted under FRAMEOS_DATA_DIR instead.
+      FRAMEOS_MEDIA_ROOTS: /app
+      FRAMEOS_GCLOUD_COMMAND: gcloud
+      CLOUDSDK_CONFIG: /gcloud
+    volumes:
+      # Local ADC impersonation credentials are read-only and never baked in.
+      - ${APPDATA}/gcloud:/gcloud:ro
+      - frameos-data:/app/.frameos-data
+    restart: unless-stopped
+
+volumes:
+  frameos-data:

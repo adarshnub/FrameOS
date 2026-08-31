@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+.frameos-data
+.env
+.git
+supabase/.temp
+**/*.log
+**/*.tmp

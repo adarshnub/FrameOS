@@ -73,6 +73,22 @@ export interface ProviderUsageSummary {
   unpricedRequests: number;
 }
 
+export interface AnalysisUsageRecord {
+  id: string;
+  projectId: string;
+  provider: "gemini";
+  model: string;
+  operation: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd?: number;
+  pricingSource?: string;
+  providerResponseId?: string;
+  createdAt: string;
+}
+
 export interface AnalysisIndexRow {
   segmentId: string;
   projectId: string;
@@ -256,6 +272,23 @@ export class RuntimeDatabase {
       );
       CREATE INDEX IF NOT EXISTS provider_usage_created_idx ON provider_usage(created_at DESC);
       CREATE INDEX IF NOT EXISTS provider_usage_session_idx ON provider_usage(session_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS analysis_usage (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        cached_input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        total_tokens INTEGER NOT NULL,
+        estimated_cost_usd REAL,
+        pricing_source TEXT,
+        provider_response_id TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS analysis_usage_created_idx ON analysis_usage(created_at DESC);
+      CREATE INDEX IF NOT EXISTS analysis_usage_project_idx ON analysis_usage(project_id, created_at DESC);
       CREATE TABLE IF NOT EXISTS analysis_cache (
         cache_key TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -682,6 +715,101 @@ export class RuntimeDatabase {
         record.createdAt,
       );
     return record;
+  }
+
+  public recordAnalysisUsage(
+    input: Omit<AnalysisUsageRecord, "id" | "createdAt">,
+  ): AnalysisUsageRecord {
+    const record: AnalysisUsageRecord = {
+      id: createId(),
+      ...input,
+      createdAt: new Date().toISOString(),
+    };
+    this.db()
+      .prepare(
+        "INSERT INTO analysis_usage (id, project_id, provider, model, operation, input_tokens, cached_input_tokens, output_tokens, total_tokens, estimated_cost_usd, pricing_source, provider_response_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        record.id,
+        record.projectId,
+        record.provider,
+        record.model,
+        record.operation,
+        record.inputTokens,
+        record.cachedInputTokens,
+        record.outputTokens,
+        record.totalTokens,
+        record.estimatedCostUsd ?? null,
+        record.pricingSource ?? null,
+        record.providerResponseId ?? null,
+        record.createdAt,
+      );
+    return record;
+  }
+
+  public listAnalysisUsage(
+    input: { projectId?: string; limit?: number } = {},
+  ): AnalysisUsageRecord[] {
+    const clauses: string[] = [];
+    const parameters: Array<string | number> = [];
+    if (input.projectId !== undefined) {
+      clauses.push("project_id = ?");
+      parameters.push(input.projectId);
+    }
+    const where = clauses.length === 0 ? "" : ` WHERE ${clauses.join(" AND ")}`;
+    parameters.push(Math.min(Math.max(input.limit ?? 200, 1), 2_000));
+    const rows = this.db()
+      .prepare(
+        `SELECT * FROM analysis_usage${where} ORDER BY created_at DESC LIMIT ?`,
+      )
+      .all(...parameters) as unknown as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: String(row.id),
+      projectId: String(row.project_id),
+      provider: "gemini",
+      model: String(row.model),
+      operation: String(row.operation),
+      inputTokens: Number(row.input_tokens),
+      cachedInputTokens: Number(row.cached_input_tokens),
+      outputTokens: Number(row.output_tokens),
+      totalTokens: Number(row.total_tokens),
+      ...(row.estimated_cost_usd === null
+        ? {}
+        : { estimatedCostUsd: Number(row.estimated_cost_usd) }),
+      ...(row.pricing_source === null
+        ? {}
+        : { pricingSource: String(row.pricing_source) }),
+      ...(row.provider_response_id === null
+        ? {}
+        : { providerResponseId: String(row.provider_response_id) }),
+      createdAt: String(row.created_at),
+    }));
+  }
+
+  public summarizeAnalysisUsage(
+    input: { projectId?: string } = {},
+  ): ProviderUsageSummary {
+    const clauses: string[] = [];
+    const parameters: string[] = [];
+    if (input.projectId !== undefined) {
+      clauses.push("project_id = ?");
+      parameters.push(input.projectId);
+    }
+    const where = clauses.length === 0 ? "" : ` WHERE ${clauses.join(" AND ")}`;
+    const row = this.db()
+      .prepare(
+        `SELECT COUNT(*) AS requests, COALESCE(SUM(input_tokens), 0) AS input_tokens, COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens, COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(total_tokens), 0) AS total_tokens, COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd, COALESCE(SUM(CASE WHEN estimated_cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unpriced_requests FROM analysis_usage${where}`,
+      )
+      .get(...parameters) as Record<string, unknown>;
+    return {
+      requests: Number(row.requests),
+      inputTokens: Number(row.input_tokens),
+      cachedInputTokens: Number(row.cached_input_tokens),
+      outputTokens: Number(row.output_tokens),
+      totalTokens: Number(row.total_tokens),
+      estimatedCostUsd: Number(row.estimated_cost_usd),
+      unpricedRequests: Number(row.unpriced_requests),
+    };
   }
 
   public listProviderUsage(

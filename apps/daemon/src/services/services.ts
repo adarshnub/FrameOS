@@ -16,6 +16,7 @@ import { AnalysisService } from "../analysis/analysis-service.js";
 import { AssetService } from "../assets/asset-service.js";
 import { CaptionInterchangeService } from "../interchange/captions.js";
 import { loadExternalAnalyzerPlugins } from "../analysis/external-analyzer.js";
+import { loadVertexGeminiAnalyzer } from "../analysis/vertex-gemini-analyzer.js";
 import { SemanticService } from "../semantic/semantic-service.js";
 import { ObservabilityService } from "../observability/observability-service.js";
 
@@ -79,6 +80,13 @@ export async function createServices(
     events,
     config.dataDirectory,
   );
+  const vertexGeminiAnalyzer = loadVertexGeminiAnalyzer(
+    process.env,
+    mediaPolicy,
+    projects,
+    database,
+    observability,
+  );
   const analysis = new AnalysisService(
     database,
     projects,
@@ -86,7 +94,13 @@ export async function createServices(
     jobs,
     events,
     mediaPolicy,
-    externalAnalyzers,
+    {
+      plugins: [...externalAnalyzers.plugins, ...vertexGeminiAnalyzer.plugins],
+      descriptors: [
+        ...externalAnalyzers.descriptors,
+        ...vertexGeminiAnalyzer.descriptors,
+      ],
+    },
   );
   capabilities.setAnalyzerDescriptorProvider(() => analysis.listAnalyzers());
   const assets = new AssetService(

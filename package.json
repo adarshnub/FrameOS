@@ -24,6 +24,10 @@
     "mcp": "npm run mcp --workspace @frameos/daemon",
     "sbom": "node tools/generate-sbom.mjs",
     "sdk:python:check": "python -c \"import ast,pathlib; [ast.parse(pathlib.Path(p).read_text(encoding='utf-8'), filename=p) for p in ['packages/sdk-python/frameos/client.py','packages/sdk-python/frameos/__init__.py']]\"",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset --local",
+    "supabase:status": "supabase status",
     "start": "npm run start --workspace @frameos/daemon",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
@@ -31,6 +35,7 @@
   "devDependencies": {
     "@types/node": "^24.10.0",
     "prettier": "^3.6.2",
+    "supabase": "^2.115.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"

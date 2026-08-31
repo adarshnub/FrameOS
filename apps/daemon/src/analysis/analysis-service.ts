@@ -137,6 +137,21 @@ export const analyzerDescriptors: AnalyzerDescriptor[] = [
     reasonUnavailable: "No audited ONNX Runtime model bundle is installed",
     parameterSchema: {},
   },
+  {
+    id: "google.vertex.gemini.video",
+    version: "planned",
+    capabilityId: "analysis.visual.gemini",
+    name: "Gemini video intelligence",
+    description:
+      "Uses Vertex AI Gemini with a temporary private Cloud Storage object to produce timestamped visual semantic segments.",
+    outputTypes: ["visual_semantic"],
+    assetKinds: ["video", "audio", "image"],
+    available: false,
+    deterministic: false,
+    reasonUnavailable:
+      "Configure Vertex AI Gemini, Cloud Storage, and Application Default Credentials",
+    parameterSchema: {},
+  },
 ];
 
 function stableValue(value: unknown): unknown {

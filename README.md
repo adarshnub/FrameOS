@@ -16,7 +16,7 @@ This repository currently implements the contract-first editing kernel:
 - Redacted structured NDJSON logs, request timing, and live admin log streaming
 - Persisted three-cycle draft evaluation/revision with approval supersession
 - Typed frame/region/contact-sheet and PCM waveform preview jobs with authenticated artifact delivery
-- Reproducible analysis jobs with FTS5 search, isolated hash-pinned analyzer workers, and manifest-gated whisper.cpp transcription plus FFmpeg silence, scene, and beat/onset adapters
+- Reproducible analysis jobs with FTS5 search, optional Vertex AI Gemini hybrid video/image analysis (temporary private GCS objects, token ledger, cost cap, and cleanup), isolated hash-pinned analyzer workers, and manifest-gated whisper.cpp transcription plus FFmpeg silence, scene, and beat/onset adapters
 - Semantic search plus non-mutating silence removal, B-roll sync, highlight assembly, beat-synchronized cuts, dynamic captions, and vertical-edit plans compiled into ordinary transactions, including supported forward-linear retime maps where documented
 - Non-mutating vertical-format plans compiled into reversible sequence and transform operations
 - Hash-based external/managed asset ingestion with portable project-bundle URIs

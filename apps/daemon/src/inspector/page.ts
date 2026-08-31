@@ -11,13 +11,25 @@ export const inspectorHtml = String.raw`<!doctype html>
   <header class="topbar">
     <div>
       <div class="wordmark"><span>FRAME</span><b>/</b><span>OS</span></div>
-      <p>Feature Lab / implemented-surface tester</p>
+      <p id="section-kicker">Control room / testing environment</p>
     </div>
     <div class="top-actions"><a href="/">Product site ↗</a><div id="connection-state" class="signal offline"><i></i><span>OFFLINE</span></div></div>
   </header>
 
-  <main class="shell">
-    <section class="panel link-panel" aria-labelledby="link-title">
+  <nav class="dashboard-nav" aria-label="Control room sections">
+    <div class="nav-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+    <button data-dashboard-view="overview" aria-current="page"><span>01</span><b>Overview</b><small>Readiness & feature tests</small></button>
+    <button data-dashboard-view="projects"><span>02</span><b>Projects</b><small>Bundles & project state</small></button>
+    <button data-dashboard-view="media"><span>03</span><b>Media intelligence</b><small>Import, analyze & search</small></button>
+    <button data-dashboard-view="editing"><span>04</span><b>Editing lab</b><small>Operations & transactions</small></button>
+    <button data-dashboard-view="agents"><span>05</span><b>Agent studio</b><small>Plans, approvals & budgets</small></button>
+    <button data-dashboard-view="observability"><span>06</span><b>System ledger</b><small>AI cost & live logs</small></button>
+    <button data-dashboard-view="api"><span>07</span><b>API console</b><small>Full REST surface</small></button>
+    <div class="nav-footer"><span>LOCAL DAEMON</span><i></i><span id="nav-link-state">OFFLINE</span></div>
+  </nav>
+
+  <main class="shell" id="dashboard-main">
+    <section class="panel link-panel" data-dashboard-panel="overview projects media editing agents observability api" aria-labelledby="link-title">
       <div class="panel-head"><span>00</span><h1 id="link-title">Daemon link</h1></div>
       <label>API origin<input id="base-url" value="http://127.0.0.1:31415" spellcheck="false"></label>
       <label>Bearer token<input id="token" type="password" autocomplete="off" placeholder="Paste .frameos-data/auth-token"></label>
@@ -25,7 +37,7 @@ export const inspectorHtml = String.raw`<!doctype html>
       <output id="notice" aria-live="polite">Token stays in this browser tab.</output>
     </section>
 
-    <section class="metrics" aria-label="Completion overview">
+    <section class="metrics" data-dashboard-panel="overview" aria-label="Completion overview">
       <article class="metric panel"><small>Low-level executable</small><strong id="metric-implemented">--</strong><span>transaction operations</span></article>
       <article class="metric panel"><small>Service workflows</small><strong id="metric-service">--</strong><span>API/MCP operations</span></article>
       <article class="metric panel"><small>Remaining contracts</small><strong id="metric-contract">--</strong><span>not executable yet</span></article>
@@ -34,7 +46,7 @@ export const inspectorHtml = String.raw`<!doctype html>
     </section>
 
     <section class="workspace" aria-label="Feature lab workspace">
-      <aside class="panel projects">
+      <aside class="panel projects" data-dashboard-panel="projects">
         <div class="panel-head"><span>01</span><h2>Projects</h2><button id="refresh-projects" class="ghost" title="Refresh">Refresh</button></div>
         <form id="create-project" class="row-form">
           <input id="project-name" placeholder="New project name" maxlength="1024">
@@ -43,7 +55,7 @@ export const inspectorHtml = String.raw`<!doctype html>
         <nav id="project-list" aria-label="Projects"><p class="empty">Connect to enumerate project bundles.</p></nav>
       </aside>
 
-      <section class="panel lab">
+      <section class="panel lab" data-dashboard-panel="overview">
         <div class="panel-head"><span>02</span><h2>Implemented Feature Tests</h2><div id="revision" class="badge">REV --</div></div>
         <div class="test-grid">
           <button class="test-card" data-test="health"><b>Health + catalog</b><span>Checks daemon, operations, capabilities.</span></button>
@@ -64,7 +76,7 @@ export const inspectorHtml = String.raw`<!doctype html>
         </div>
       </section>
 
-      <aside class="panel catalog">
+      <aside class="panel catalog" data-dashboard-panel="editing">
         <div class="panel-head"><span>03</span><h2>Surface Matrix</h2></div>
         <div class="tabs" role="tablist">
           <button role="tab" aria-selected="true" data-tab="operations">Operations</button>
@@ -75,7 +87,7 @@ export const inspectorHtml = String.raw`<!doctype html>
         <div id="catalog-list" class="catalog-list"><p class="empty">Connect to load machine surface.</p></div>
       </aside>
 
-      <section class="panel manual asset-tools">
+      <section class="panel manual asset-tools" data-dashboard-panel="media">
         <div class="panel-head"><span>04</span><h2>Asset + Analysis</h2></div>
         <p class="hint">Choose a file to import it directly from Windows as a managed project asset. Absolute paths remain available for advanced external-file imports inside configured media roots.</p>
         <label class="file-picker">Choose media from this computer<input id="asset-file" type="file" accept="video/*,audio/*,image/*,.srt,.vtt,.ass,.ssa,.ttf,.otf,.woff,.woff2"><span id="asset-file-label">No file selected</span></label>
@@ -85,6 +97,7 @@ export const inspectorHtml = String.raw`<!doctype html>
           <label>Asset kind<select id="asset-kind"><option value="">Infer from extension</option><option>video</option><option>audio</option><option>image</option><option>subtitle</option><option>font</option></select></label>
           <label class="check"><input id="asset-managed" type="checkbox"> Managed copy</label>
         </div>
+        <label>Analysis mode<select id="analysis-mode"><option value="metadata">Local metadata only</option><option value="hybrid">Hybrid: local metadata + Gemini visual intelligence</option></select></label>
         <div class="actions">
           <button id="import-asset">Import asset</button>
           <button id="analyze-asset">Analyze selected asset</button>
@@ -93,7 +106,7 @@ export const inspectorHtml = String.raw`<!doctype html>
         <output id="asset-result">Select a project first.</output>
       </section>
 
-      <section class="panel manual transaction">
+      <section class="panel manual transaction" data-dashboard-panel="editing">
         <div class="panel-head"><span>05</span><h2>Transaction Console</h2><div class="mode-switch" role="group" aria-label="Transaction mode"><button data-mode="validate" class="active">Validate</button><button data-mode="preview">Preview</button><button data-mode="commit">Commit</button></div></div>
         <textarea id="transaction-json" spellcheck="false" aria-label="Transaction operations JSON">[
   {
@@ -118,7 +131,7 @@ export const inspectorHtml = String.raw`<!doctype html>
     </section>
 
     <section class="control-grid" aria-label="Agent and observability controls">
-      <section class="panel agent-workbench">
+      <section class="panel agent-workbench" data-dashboard-panel="agents">
         <div class="panel-head"><span>06</span><h2>Agent Workbench</h2><div id="provider-state" class="badge">NO PROVIDER</div></div>
         <p class="hint">The model creates a structured plan against the selected project's real state and capability catalog. It does not commit edits during planning.</p>
         <div class="agent-config">
@@ -141,15 +154,15 @@ export const inspectorHtml = String.raw`<!doctype html>
 }</pre>
       </section>
 
-      <aside class="panel usage-panel">
+      <aside class="panel usage-panel" data-dashboard-panel="observability">
         <div class="panel-head"><span>07</span><h2>AI Cost Ledger</h2><button id="refresh-usage" class="ghost">Refresh</button></div>
         <div class="usage-total"><small>Estimated spend</small><strong id="usage-cost">$0.000000</strong><span id="usage-requests">0 provider requests</span></div>
         <div class="usage-stats"><div><b id="usage-input">0</b><span>input tokens</span></div><div><b id="usage-cached">0</b><span>cached tokens</span></div><div><b id="usage-output">0</b><span>output tokens</span></div></div>
-        <div class="provider-note"><b>What uses the API key?</b><p>Only built-in agent planning currently calls the configured OpenAI Responses API. Deterministic edits, validation, previews, analysis plugins, MLT/FFmpeg processing, MCP, and rendering do not use it.</p><p>Default model: <code>gpt-4.1-mini</code>. Keys stay server-side in <code>FRAMEOS_OPENAI_API_KEY</code> and are never returned to this page.</p></div>
+        <div class="provider-note"><b>What uses AI credentials?</b><p>OpenAI is used for built-in edit planning. When enabled, Vertex AI Gemini analyzes approved media through a temporary private Cloud Storage object and returns searchable visual segments. Deterministic edits, validation, previews, MLT/FFmpeg processing, MCP, and rendering do not call either model.</p><p>Credentials stay server-side. Gemini analysis is cost-capped by <code>FRAMEOS_GEMINI_MAX_COST_USD_PER_ANALYSIS</code>; every response with usage metadata is recorded here.</p></div>
         <div id="usage-records" class="usage-records"><p class="empty">No provider usage recorded.</p></div>
       </aside>
 
-      <section class="panel api-console">
+      <section class="panel api-console" data-dashboard-panel="api">
         <div class="panel-head"><span>08</span><h2>Raw API Console</h2><div class="badge">FULL REST SURFACE</div></div>
         <p class="hint">Invoke any implemented REST workflow with the same bearer token. Use the operation catalog and transaction console above for low-level edits; use this console for previews, semantic planners, jobs, approvals, interchange, and other service endpoints.</p>
         <div class="api-request-line"><select id="api-method"><option>GET</option><option>POST</option><option>DELETE</option></select><input id="api-path" value="/api/v1/capabilities" spellcheck="false"><button id="api-send">Send request</button></div>
@@ -159,7 +172,7 @@ export const inspectorHtml = String.raw`<!doctype html>
 }</pre>
       </section>
 
-      <section class="panel realtime-logs">
+      <section class="panel realtime-logs" data-dashboard-panel="observability">
         <div class="panel-head"><span>09</span><h2>Live Operations Log</h2><div id="log-stream-state" class="badge">DISCONNECTED</div></div>
         <div class="log-toolbar"><select id="log-level"><option value="">All levels</option><option value="success">Success</option><option value="info">Info</option><option value="warn">Warnings</option><option value="error">Errors</option></select><input id="log-search" type="search" placeholder="Filter event, message, payload"><button id="log-pause" class="ghost">Pause</button><button id="log-clear" class="ghost">Clear view</button></div>
         <div class="log-columns"><span>TIME</span><span>LEVEL</span><span>EVENT / MESSAGE</span><span>DURATION</span></div>
@@ -179,6 +192,12 @@ export const inspectorCss = String.raw`
 .control-grid{display:grid;grid-template-columns:minmax(570px,1.7fr) minmax(330px,.8fr);gap:16px;margin-top:16px}.agent-workbench,.usage-panel,.api-console,.realtime-logs{min-width:0}.agent-workbench .hint{margin:0;padding:13px 14px 0}.agent-config{display:grid;grid-template-columns:1.2fr 1fr .8fr}.agent-workbench>label{padding-top:5px}.agent-workbench textarea{height:112px;margin-top:7px}.agent-workbench pre{height:230px}.agent-workbench .approve{background:#123a20}.agent-workbench .danger{background:#481910}.usage-total{padding:20px 16px;border-bottom:1px solid var(--line)}.usage-total small{font-size:9px;text-transform:uppercase;letter-spacing:.13em;color:#686b60}.usage-total strong{display:block;font:44px/1 var(--display);margin:12px 0 4px}.usage-total span{font-size:9px;color:#686b60}.usage-stats{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}.usage-stats div{padding:14px;border-right:1px solid var(--line)}.usage-stats div:last-child{border:0}.usage-stats b,.usage-stats span{display:block}.usage-stats b{font-size:16px}.usage-stats span{font-size:8px;color:#6d7067;margin-top:6px}.provider-note{padding:16px;border-bottom:1px solid var(--line)}.provider-note>b{font:21px var(--display)}.provider-note p{font-size:9px;line-height:1.65;color:#5f6259}.provider-note code{background:#ded7c7;padding:2px 4px}.usage-records{height:176px;overflow:auto;padding:0 14px}.usage-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:11px 0;border-bottom:1px solid var(--line-soft);font-size:9px}.usage-row b,.usage-row span{display:block}.usage-row span{color:#686c61;margin-top:4px}.usage-row strong{color:#1e6a34}.api-console{grid-column:1/3}.api-console .hint{padding:12px 14px 0;margin:0}.api-request-line{display:grid;grid-template-columns:120px 1fr auto;gap:12px;align-items:end;padding:12px}.api-request-line select,.api-request-line input{margin:0}.api-console textarea{height:130px}.api-console pre{height:230px}.realtime-logs{grid-column:1/3;background:#121510;color:#dce3d3}.realtime-logs .panel-head{border-color:#3c4037}.realtime-logs .panel-head>span{background:var(--acid);color:var(--ink)}.realtime-logs .panel-head .badge{border-color:#555b4e;margin-left:auto;color:#969d8d}.log-toolbar{display:grid;grid-template-columns:170px 1fr auto auto;align-items:end;padding:10px 12px;border-bottom:1px solid #34382f}.log-toolbar select,.log-toolbar input{color:#dce3d3;border-color:#565c4f;margin:0}.log-toolbar .ghost{color:#dce3d3;border-color:#565c4f}.log-columns,.system-log li{display:grid;grid-template-columns:95px 74px minmax(0,1fr) 85px;gap:12px}.log-columns{padding:8px 14px;color:#70786a;font-size:8px;letter-spacing:.13em;border-bottom:1px solid #34382f}.system-log{height:400px;overflow:auto;margin:0;padding:0;list-style:none}.system-log li{padding:9px 14px;border-bottom:1px solid #282c25;font-size:9px;line-height:1.45;align-items:start}.system-log time{color:#737b6d}.system-log .level{text-transform:uppercase;font-weight:700}.system-log .message{overflow-wrap:anywhere}.system-log .message b{display:block;color:#e8eddf}.system-log .message span{display:block;color:#858d7f;margin-top:3px;white-space:pre-wrap}.system-log .duration{color:#737b6d;text-align:right}.system-log li[data-level=success] .level{color:#82e99c}.system-log li[data-level=error] .level{color:#ff806c}.system-log li[data-level=warn] .level{color:#ecd972}.system-log li[data-level=info] .level{color:#73cdec}
 @media(max-width:1180px){.link-panel{grid-template-columns:1fr 1fr}.link-panel .panel-head{grid-column:1/3;border-right:0;border-bottom:1px solid var(--line)}.metrics{grid-template-columns:repeat(3,1fr)}.workspace{grid-template-columns:260px 1fr;grid-template-rows:auto auto auto}.catalog{grid-row:3;grid-column:1/3}.projects{grid-row:1/3}.asset-tools,.transaction{grid-column:2}.catalog-list{height:360px}.control-grid{grid-template-columns:1fr}.api-console,.realtime-logs{grid-column:1}.agent-config{grid-template-columns:1fr 1fr}}@media(max-width:760px){.topbar{padding:0 16px}.topbar p,.top-actions>a{display:none}.link-panel,.metrics,.workspace,.test-grid,.split,.control-grid,.agent-config,.api-request-line{display:block}.panel{margin-bottom:14px}.projects nav,.catalog-list{max-height:none;height:320px}.test-card{margin-bottom:10px}.signal span{display:none}.api-request-line>*{margin-bottom:10px}.log-toolbar{grid-template-columns:1fr 1fr}.log-columns,.system-log li{grid-template-columns:66px 58px minmax(0,1fr)}.log-columns span:last-child,.system-log .duration{display:none}}
 @media(prefers-reduced-motion:no-preference){.panel{animation:rise .32s both}.metrics .panel:nth-child(2){animation-delay:.04s}.metrics .panel:nth-child(3){animation-delay:.08s}.metrics .panel:nth-child(4){animation-delay:.12s}.metrics .panel:nth-child(5){animation-delay:.16s}@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}}
+
+/* Sectioned control-room shell. Existing panels keep their IDs and actions;
+   this layer presents one focused testing workspace at a time. */
+.dashboard-nav{position:fixed;z-index:4;top:82px;bottom:0;width:248px;padding:20px 12px;background:#10130e;border-right:1px solid #3c4036;color:#e9e9dc;display:flex;flex-direction:column;gap:4px}.dashboard-nav button{padding:12px 11px;background:transparent;color:#c6cabd;border:1px solid transparent;text-align:left;display:grid;grid-template-columns:28px 1fr;column-gap:9px;row-gap:2px;box-shadow:none;letter-spacing:0}.dashboard-nav button span{grid-row:1/3;color:#788071;font-size:9px}.dashboard-nav button b{font:15px var(--display);letter-spacing:-.02em;text-transform:none}.dashboard-nav button small{font-size:8px;color:#7f8778;text-transform:uppercase;letter-spacing:.1em}.dashboard-nav button:hover{color:#fff;background:#1a1f16;outline:0}.dashboard-nav button[aria-current=page]{background:var(--acid);color:var(--ink);border-color:#b3d92d;box-shadow:4px 4px 0 #050605}.dashboard-nav button[aria-current=page] span,.dashboard-nav button[aria-current=page] small{color:#34401a}.nav-orbit{height:70px;border-bottom:1px solid #373c32;margin:0 5px 10px;position:relative;overflow:hidden}.nav-orbit:before{content:"FRAMEOS / OPS";position:absolute;left:0;bottom:10px;color:var(--acid);font-size:9px;letter-spacing:.18em}.nav-orbit i{position:absolute;border:1px solid #66715b;border-radius:50%}.nav-orbit i:nth-child(1){width:78px;height:78px;right:-6px;top:-33px}.nav-orbit i:nth-child(2){width:43px;height:43px;right:12px;top:-15px;border-color:var(--acid)}.nav-orbit i:nth-child(3){width:6px;height:6px;right:29px;top:4px;background:var(--orange);border:0}.nav-footer{margin-top:auto;border-top:1px solid #373c32;padding:14px 5px 3px;display:flex;align-items:center;gap:7px;color:#7f8778;font-size:8px;letter-spacing:.12em}.nav-footer i{width:7px;height:7px;border-radius:50%;background:#ef4d37}.nav-footer[data-online=true] i{background:var(--acid);box-shadow:0 0 10px var(--acid)}
+body[data-dashboard-view] .topbar{padding-left:276px}.shell{margin-left:248px;min-height:calc(100vh - 82px)}body[data-dashboard-view] [data-dashboard-panel]{display:none}body[data-dashboard-view=overview] [data-dashboard-panel~="overview"],body[data-dashboard-view=projects] [data-dashboard-panel~="projects"],body[data-dashboard-view=media] [data-dashboard-panel~="media"],body[data-dashboard-view=editing] [data-dashboard-panel~="editing"],body[data-dashboard-view=agents] [data-dashboard-panel~="agents"],body[data-dashboard-view=observability] [data-dashboard-panel~="observability"],body[data-dashboard-view=api] [data-dashboard-panel~="api"]{display:grid}body[data-dashboard-view] .workspace{display:block;min-height:0}body[data-dashboard-view] .workspace>.panel{margin:0 0 16px}body[data-dashboard-view] .control-grid{display:block}body[data-dashboard-view] .control-grid>.panel{margin:0 0 16px}body[data-dashboard-view=projects] .projects{min-height:calc(100vh - 200px)}body[data-dashboard-view=editing] .catalog{min-height:360px}body[data-dashboard-view=overview] .lab{min-height:580px}.link-panel{margin-bottom:16px}
+@media(max-width:900px){.dashboard-nav{position:sticky;top:0;width:100%;height:auto;overflow:auto;flex-direction:row;padding:8px;border-right:0;border-bottom:1px solid #3c4036}.dashboard-nav button{min-width:150px}.dashboard-nav .nav-orbit,.dashboard-nav .nav-footer{display:none}body[data-dashboard-view] .topbar{padding-left:16px}.shell{margin-left:0}.dashboard-nav+ .shell{padding-top:14px}}
 `;
 
 export const inspectorJavaScript = String.raw`
@@ -197,14 +216,17 @@ export const inspectorJavaScript = String.raw`
     logsPaused:false,
     tab:"operations",
     mode:"validate",
-    catalog:{operations:[],capabilities:[],jobs:[]}
+    catalog:{operations:[],capabilities:[],jobs:[]},
+    analyzers:[]
   };
   var el=function(id){return document.getElementById(id);};
   var now=function(){return new Date().toISOString();};
   var id=function(){return crypto.randomUUID();};
   function envelopeText(error){return error && error.message ? error.message : String(error);}
   function notice(message,error){el("notice").textContent=message;el("notice").style.color=error?"#b42f22":"#5d6057";}
-  function setConnected(value){var node=el("connection-state");node.classList.toggle("online",value);node.classList.toggle("offline",!value);node.querySelector("span").textContent=value?"LINKED":"OFFLINE";}
+  var dashboardLabels={overview:"Control room / readiness and feature tests",projects:"Project archive / bundles and canonical state",media:"Media intelligence / ingest, Gemini analysis, and search",editing:"Editing lab / operations and deterministic transactions",agents:"Agent studio / plans, approvals, and budgets",observability:"System ledger / provider cost and live runtime logs",api:"API console / authenticated REST exploration"};
+  function setDashboardView(view){if(!dashboardLabels[view])view="overview";document.body.dataset.dashboardView=view;document.querySelectorAll("[data-dashboard-view]").forEach(function(button){button.setAttribute("aria-current",button.dataset.dashboardView===view?"page":"false");});el("section-kicker").textContent=dashboardLabels[view];sessionStorage.setItem("frameos-dashboard-view",view);window.scrollTo({top:0,behavior:"smooth"});}
+  function setConnected(value){var node=el("connection-state");node.classList.toggle("online",value);node.classList.toggle("offline",!value);node.querySelector("span").textContent=value?"LINKED":"OFFLINE";el("nav-link-state").textContent=value?"LINKED":"OFFLINE";el("nav-link-state").parentElement.dataset.online=String(value);}
   async function api(method,path,body){
     var response=await fetch(state.baseUrl+path,{method:method,headers:{authorization:"Bearer "+state.token,accept:"application/json",...(body===undefined?{}:{"content-type":"application/json"})},...(body===undefined?{}:{body:JSON.stringify(body)})});
     var envelope=await response.json().catch(function(){return {data:null,error:{code:"BAD_RESPONSE",message:response.statusText},meta:{}};});
@@ -322,10 +344,11 @@ export const inspectorJavaScript = String.raw`
     if(!items.length) list.innerHTML='<p class="empty">No matching records.</p>';
   }
   async function refreshSurface(){
-    var values=await Promise.all([api("GET","/api/v1/operations"),api("GET","/api/v1/capabilities"),api("GET","/api/v1/jobs").catch(function(){return {data:[]};})]);
+    var values=await Promise.all([api("GET","/api/v1/operations"),api("GET","/api/v1/capabilities"),api("GET","/api/v1/jobs").catch(function(){return {data:[]};}),api("GET","/api/v1/analysis/analyzers")]);
     state.catalog.operations=values[0].data||[];
     state.catalog.capabilities=values[1].data||[];
     state.catalog.jobs=values[2].data||[];
+    state.analyzers=values[3].data||[];
     updateMetrics();
     renderCatalog();
   }
@@ -525,11 +548,15 @@ export const inspectorJavaScript = String.raw`
     await ensureProject();
     var assetId=state.selectedAssetId||Object.keys(state.project.assets)[0];
     if(!assetId) throw new Error("Import or select an asset first.");
-    var started=await api("POST","/api/v1/projects/"+state.project.projectId+"/assets/"+assetId+"/analysis",{projectId:state.project.projectId,assetId:assetId,analyzers:["frameos.asset-metadata"],parameters:{},force:false});
+    var mode=el("analysis-mode").value;
+    var gemini=state.analyzers.find(function(analyzer){return analyzer.id==="google.vertex.gemini.video";});
+    if(mode==="hybrid"&&(!gemini||!gemini.available)) throw new Error("CAPABILITY_UNAVAILABLE: Gemini analysis is not configured. Check Vertex AI ADC, GCS bucket, and daemon logs.");
+    var analyzers=mode==="hybrid"?["frameos.asset-metadata","google.vertex.gemini.video"]:["frameos.asset-metadata"];
+    var started=await api("POST","/api/v1/projects/"+state.project.projectId+"/assets/"+assetId+"/analysis",{projectId:state.project.projectId,assetId:assetId,analyzers:analyzers,parameters:{},force:false});
     var job=await pollJob(started.data.id,80);
     await loadProject(state.project.projectId);
     await refreshSurface();
-    el("asset-result").textContent="Analysis job "+job.status+"; "+(job.error?job.error.message:"metadata indexed")+".";
+    el("asset-result").textContent="Analysis job "+job.status+"; "+(job.error?job.error.message:(mode==="hybrid"?"metadata and Gemini visual segments indexed":"metadata indexed"))+".";
   }
   async function searchAnalysis(){
     await ensureProject();
@@ -545,6 +572,7 @@ export const inspectorJavaScript = String.raw`
     sessionStorage.setItem("frameos-url",state.baseUrl);
     try{await refreshAll();}catch(error){setConnected(false);notice(envelopeText(error),true);}
   });
+  document.querySelectorAll("[data-dashboard-view]").forEach(function(button){button.addEventListener("click",function(){setDashboardView(button.dataset.dashboardView);});});
   el("refresh-projects").addEventListener("click",async function(){try{await refreshAll();log("Refreshed daemon surface","pass");}catch(error){log("Refresh failed","fail",envelopeText(error));}});
   el("create-project").addEventListener("submit",async function(event){
     event.preventDefault();
@@ -582,5 +610,6 @@ export const inspectorJavaScript = String.raw`
   el("log-pause").addEventListener("click",function(){state.logsPaused=!state.logsPaused;el("log-pause").textContent=state.logsPaused?"Resume":"Pause";el("log-stream-state").textContent=state.logsPaused?"PAUSED":"LIVE";if(!state.logsPaused)refreshLogs().catch(function(){});});
   el("log-clear").addEventListener("click",function(){state.logs=[];renderSystemLogs();});
   el("base-url").value=sessionStorage.getItem("frameos-url")||location.origin;
+  setDashboardView(sessionStorage.getItem("frameos-dashboard-view")||"overview");
 })();
 `;
