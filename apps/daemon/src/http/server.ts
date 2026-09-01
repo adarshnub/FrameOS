@@ -50,6 +50,7 @@ import {
   inspectorJavaScript,
 } from "../inspector/page.js";
 import { landingCss, landingHtml, landingJavaScript } from "../site/page.js";
+import { studioCss, studioHtml, studioJavaScript } from "../studio/page.js";
 import type { LogLevel } from "../observability/observability-service.js";
 
 const createProjectInputSchema = z
@@ -309,6 +310,24 @@ export async function buildHttpServer(
   app.get("/site/app.js", async (_request, reply) => {
     void reply.type("text/javascript; charset=utf-8");
     return landingJavaScript;
+  });
+
+  app.get("/studio", async (_request, reply) => {
+    void reply
+      .header(
+        "content-security-policy",
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src data: blob:; media-src blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      )
+      .type("text/html; charset=utf-8");
+    return studioHtml;
+  });
+  app.get("/studio/app.css", async (_request, reply) => {
+    void reply.type("text/css; charset=utf-8");
+    return studioCss;
+  });
+  app.get("/studio/app.js", async (_request, reply) => {
+    void reply.type("text/javascript; charset=utf-8");
+    return studioJavaScript;
   });
 
   app.get("/inspector", async (_request, reply) => {

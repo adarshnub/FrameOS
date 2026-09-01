@@ -12,7 +12,7 @@ export const landingHtml = String.raw`<!doctype html>
   <header class="nav">
     <a class="brand" href="/" aria-label="FrameOS home"><span>FRAME</span><i>/</i><span>OS</span></a>
     <nav aria-label="Primary"><a href="#system">System</a><a href="#services">Services</a><a href="#access">Early access</a></nav>
-    <a class="console-link" href="/inspector">Open control room <span>↗</span></a>
+    <a class="console-link" href="/studio">Open cut room <span>↗</span></a>
   </header>
 
   <main>
@@ -21,7 +21,7 @@ export const landingHtml = String.raw`<!doctype html>
         <p class="eyebrow"><span></span> Agent-native media infrastructure / v0.1</p>
         <h1>The timeline<br>is now <em>an API.</em></h1>
         <p class="lede">FrameOS gives software agents precise, inspectable control over a professional video-editing engine—from a one-frame trim to a complete multi-track production.</p>
-        <div class="hero-actions"><a class="primary" href="#access">Join the first cohort</a><a class="text-link" href="/inspector">Test the live API surface →</a></div>
+        <div class="hero-actions"><a class="primary" href="/studio">Open the cut room</a><a class="text-link" href="/inspector">Test the live API surface →</a></div>
       </div>
       <div class="hero-machine" aria-label="FrameOS transaction visualization">
         <div class="machine-top"><span>REVISION / 0017</span><span class="live">● DETERMINISTIC</span></div>
@@ -78,7 +78,7 @@ export const landingHtml = String.raw`<!doctype html>
     </section>
   </main>
 
-  <footer><a class="brand" href="/"><span>FRAME</span><i>/</i><span>OS</span></a><p>Agent-native video infrastructure.<br>Built frame by frame.</p><div><a href="/inspector">Control room</a><a href="/health">System health</a><a href="https://github.com/">GitHub</a></div><small>© 2026 FRAMEOS / PRE-ALPHA</small></footer>
+  <footer><a class="brand" href="/"><span>FRAME</span><i>/</i><span>OS</span></a><p>Agent-native video infrastructure.<br>Built frame by frame.</p><div><a href="/studio">Cut room</a><a href="/inspector">Control room</a><a href="/health">System health</a><a href="https://github.com/">GitHub</a></div><small>© 2026 FRAMEOS / PRE-ALPHA</small></footer>
   <script src="/site/app.js" defer></script>
 </body>
 </html>`;

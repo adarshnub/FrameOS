@@ -539,7 +539,11 @@ class GcsObjectStore {
         const response = await fetch(sessionUri, {
           method: "PUT",
           signal,
-          redirect: "error",
+          // GCS returns HTTP 308 (Resume Incomplete) after every non-final
+          // resumable-upload chunk.  Do not follow arbitrary redirects, but
+          // surface that protocol response so the loop can send the next
+          // chunk instead of treating it as a network failure.
+          redirect: "manual",
           headers: {
             ...(await this.headers(signal)),
             "content-length": length.toString(),
