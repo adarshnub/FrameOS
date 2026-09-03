@@ -610,6 +610,28 @@ export async function buildHttpServer(
     return successEnvelope(asset, { revision: project.revision });
   });
 
+  app.get(
+    "/api/v1/projects/:projectId/assets/:assetId/content",
+    async (request, reply) => {
+      const params = projectParamsSchema
+        .extend({ assetId: z.string().uuid() })
+        .strict()
+        .parse(request.params);
+      const media = await services.assets.resolveContent(
+        params.projectId,
+        params.assetId,
+      );
+      void reply
+        .header("X-Content-Type-Options", "nosniff")
+        .header(
+          "Content-Disposition",
+          `inline; filename="${basename(media.name).replaceAll('"', "")}"`,
+        )
+        .type(media.contentType);
+      return reply.send(createReadStream(media.path));
+    },
+  );
+
   app.get("/api/v1/analysis/analyzers", async () =>
     successEnvelope(services.analysis.listAnalyzers()),
   );

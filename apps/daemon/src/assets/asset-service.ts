@@ -77,6 +77,27 @@ function localPath(uri: string): string {
   return uri;
 }
 
+function mediaContentType(path: string): string {
+  return (
+    {
+      ".mp4": "video/mp4",
+      ".webm": "video/webm",
+      ".mov": "video/quicktime",
+      ".m4v": "video/x-m4v",
+      ".avi": "video/x-msvideo",
+      ".mpeg": "video/mpeg",
+      ".mpg": "video/mpeg",
+      ".mp3": "audio/mpeg",
+      ".wav": "audio/wav",
+      ".m4a": "audio/mp4",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+    } as Record<string, string | undefined>
+  )[extname(path).toLowerCase()] ?? "application/octet-stream";
+}
+
 export class AssetService {
   private readonly derivativeLocks = new Map<string, Promise<void>>();
 
@@ -88,6 +109,34 @@ export class AssetService {
     private readonly worker: EngineWorkerClient,
     private readonly jobs: JobManager,
   ) {}
+
+  /** Resolve an approved project asset for authenticated browser playback. */
+  public async resolveContent(projectId: string, assetId: string): Promise<{
+    path: string;
+    contentType: string;
+    name: string;
+  }> {
+    const project = await this.projects.load(projectId);
+    const asset = project.assets[assetId];
+    if (asset === undefined) {
+      throw new FrameOSError("NOT_FOUND", `Asset ${assetId} was not found`, 404);
+    }
+    if (!asset.uri.startsWith("frameos:")) {
+      await this.mediaPolicy.validateUris([asset.uri]);
+    }
+    const path = asset.uri.startsWith("frameos:")
+      ? this.projects.resolveProjectUri(projectId, asset.uri)
+      : localPath(asset.uri);
+    const info = await stat(path).catch(() => undefined);
+    if (info?.isFile() !== true) {
+      throw new FrameOSError(
+        "NOT_FOUND",
+        `Media for asset ${asset.id} is unavailable`,
+        404,
+      );
+    }
+    return { path, contentType: mediaContentType(path), name: asset.name };
+  }
 
   private async withDerivativeLock<T>(
     key: string,
