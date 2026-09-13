@@ -180,6 +180,7 @@ export const aiPlanSchema = z
   .strict();
 export const aiPlanRequestSchema = z
   .object({
+    planner: z.enum(["simple", "advanced"]).default("simple"),
     projectId: z.uuid(),
     baseRevision: z.int().nonnegative(),
     brief: z.string().trim().min(1).max(8000),

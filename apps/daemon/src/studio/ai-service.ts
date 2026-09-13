@@ -5,6 +5,7 @@ import {
   configuration,
 } from "../analysis/vertex-gemini-analyzer.js";
 import type { FrameOSServices } from "../services/services.js";
+import { planAdvanced } from "./advanced-planner.js";
 import {
   aiPlanSchema,
   compileAiPlan,
@@ -16,6 +17,7 @@ export type GenerateEdit = (
   prompt: string,
   signal: AbortSignal,
   frames?: VisualReviewRequest["frames"],
+  schema?: Record<string, unknown>,
 ) => Promise<{
   text: string;
   model: string;
@@ -59,7 +61,7 @@ export function vertexEditGenerator(
 ): GenerateEdit {
   const config = configuration(environment);
   const tokens = config ? new AccessTokenProvider(config) : undefined;
-  return async (prompt, signal, frames = []) => {
+  return async (prompt, signal, frames = [], schema) => {
     if (!config || !tokens)
       throw new FrameOSError(
         "CAPABILITY_UNAVAILABLE",
@@ -90,7 +92,7 @@ export function vertexEditGenerator(
                 text:
                   prompt +
                   "\nExact action variants (include ONLY fields for the chosen variant):\n" +
-                  JSON.stringify(responseSchema),
+                  JSON.stringify(schema ?? responseSchema),
               },
               ...frames.flatMap((frame) => [
                 {
@@ -199,7 +201,11 @@ export class StudioAiService {
   public constructor(
     private readonly services: Pick<
       FrameOSServices,
-      "projects" | "analysis" | "transactions" | "observability"
+      | "projects"
+      | "analysis"
+      | "transactions"
+      | "observability"
+      | "capabilities"
     >,
     private readonly generate: GenerateEdit = vertexEditGenerator(process.env),
   ) {}
@@ -444,6 +450,60 @@ export class StudioAiService {
           "This timeline is too large for the AI editor. Use a smaller project.",
           422,
         );
+      if (request.planner === "advanced" && !visualReview) {
+        const capabilities =
+          await this.services.capabilities.listCapabilities();
+        const advanced = await planAdvanced({
+          project,
+          request,
+          context,
+          capabilities,
+          generate: this.generate,
+          signal,
+          resolveUri: (uri) =>
+            this.services.projects.resolveProjectUri(project.projectId, uri),
+        });
+        if (advanced.steps.length)
+          await this.services.transactions.execute({
+            projectId: project.projectId,
+            baseRevision: project.revision,
+            idempotencyKey: "advanced-plan-" + createId(),
+            mode: "validate",
+            operations: advanced.steps.map((s) => s.op),
+          });
+        if (
+          (await this.services.projects.load(project.projectId)).revision !==
+          project.revision
+        )
+          throw new FrameOSError(
+            "VALIDATION_ERROR",
+            "The project changed while AI was planning. Generate a fresh plan.",
+            409,
+          );
+        this.services.observability.record({
+          level: "info",
+          eventType: "studio.ai.advanced.generated",
+          category: "agent",
+          projectId: project.projectId,
+          message: "Advanced proposal validated",
+          data: {
+            model: advanced.model,
+            ...advanced.usage,
+            stages: advanced.planning.stages,
+          },
+        });
+        return {
+          ...advanced,
+          ...(request.referenceAssetId
+            ? {
+                reference: {
+                  assetId: request.referenceAssetId,
+                  analyzedShots: referenceAnalysis.length,
+                },
+              }
+            : {}),
+        };
+      }
       const result = await this.generate(
         instructions +
           "\nCONTEXT DATA:\n" +

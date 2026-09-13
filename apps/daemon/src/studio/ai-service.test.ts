@@ -247,4 +247,65 @@ describe("Studio AI service", () => {
     ).toEqual([]);
     expect(validate).not.toHaveBeenCalled();
   });
+  it("routes advanced requests through intent, selection and execution before transaction validation", async () => {
+    const { project, request, validate } = await fixture();
+    const capability = (id: string) => ({
+      id,
+      name: id,
+      description: "",
+      kind: "operation" as const,
+      available: true,
+      baseline: true,
+      provider: "test",
+      alternatives: [],
+      metadata: {},
+    });
+    vi.spyOn(services.capabilities, "listCapabilities").mockResolvedValue([
+      capability("engine.mlt"),
+      capability("operation.sequence.format.set"),
+    ]);
+    const sequence = project.sequences[project.settings.defaultSequenceId]!;
+    const operation = {
+      operationId: createId(),
+      type: "sequence.format.set",
+      targetId: sequence.id,
+      arguments: { format: { ...sequence.format, width: 1080, height: 1920 } },
+    };
+    const generate = vi.fn<GenerateEdit>();
+    for (const value of [
+      {
+        objective: "Portrait canvas",
+        requirements: ["1080 by 1920"],
+        clarification: "",
+      },
+      {
+        tools: [{ name: operation.type, purpose: "Portrait canvas" }],
+        unsupported: [],
+      },
+      {
+        summary: "Portrait",
+        warnings: [],
+        steps: [{ label: "Set portrait canvas", operation }],
+      },
+    ])
+      generate.mockResolvedValueOnce({
+        text: JSON.stringify(value),
+        model: "test",
+        inputTokens: 10,
+        outputTokens: 5,
+      });
+    const result = await new StudioAiService(services, generate).plan({
+      ...request,
+      planner: "advanced",
+    });
+    expect(generate).toHaveBeenCalledTimes(3);
+    expect(result.steps[0]?.op.type).toBe(operation.type);
+    expect(validate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "validate",
+        baseRevision: project.revision,
+      }),
+    );
+    expect(sequence.format.width).toBe(1920);
+  });
 });
