@@ -97,6 +97,31 @@ this is not yet optimized for very large media libraries or streaming proxies.
 
 ## Verification
 
+### Live Chrome / Gemini check — 2026-09-13
+
+Test project: `Studio browser QA 2026-09-13T03:30:08.860Z`.
+The real `gemini-2.5-flash` planner generated an eight-operation proposal:
+two consecutive four-second source cuts, second-shot rotation 10° / scale 0.8,
+a two-second title, and disabling both old nonempty tracks without deleting them.
+Approval executed the operations with the visible assistant cursor. Title and
+transformed footage were checked during playback; edits persisted after reload.
+
+A second natural-language request split the second shot at timeline 6 seconds
+and moved its right half to 7 seconds. Stop was verified with zero operations
+applied; a regenerated plan then completed both operations (revision 26).
+The resulting active timeline is 9 seconds, with a 6–7 second gap.
+
+Provider fixes use JSON output with exact action definitions in the prompt,
+bounded Gemini 2.5 thinking, strict local schema validation, and transaction
+dry runs before approval. Invalid output diagnostics record issue paths/codes,
+not model output or credentials. Completion/Stop counts now replace the stale
+"no edits applied yet" label; timeline gaps no longer display the import welcome.
+
+These were explicit-range editing tests, not a new visual-analysis/highlight
+quality test or rendered MP4 export test. The first valid montage proposal omitted
+one old track; naming both tracks in the revised brief resolved it. Human plan
+review remains necessary to check intent, beyond structural validation.
+
 ```sh
 npm run test --workspace @frameos/daemon -- src/studio/editor.test.ts src/http/server.test.ts
 npm run build --workspace @frameos/daemon

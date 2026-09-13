@@ -16,58 +16,38 @@ export type GenerateEdit = (
   inputTokens: number;
   outputTokens: number;
 }>;
-// Vertex's constrained schema subset cannot represent the full discriminated union.
-// Constrain the outer shape here and strictly validate each action with Zod afterwards.
-const responseSchema = {
-  type: "OBJECT",
-  required: ["summary", "clarification", "warnings", "actions"],
-  properties: {
-    summary: { type: "STRING" },
-    clarification: { type: "STRING" },
-    warnings: { type: "ARRAY", items: { type: "STRING" } },
-    actions: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        required: ["type", "label"],
-        properties: {
-          type: {
-            type: "STRING",
-            enum: [
-              "track",
-              "add",
-              "trim",
-              "move",
-              "split",
-              "picture",
-              "volume",
-              "delete",
-              "title",
-              "track_enabled",
-            ],
-          },
-          label: { type: "STRING" },
-          ref: { type: "STRING" },
-          name: { type: "STRING" },
-          kind: { type: "STRING", enum: ["video", "audio"] },
-          track: { type: "STRING" },
-          item: { type: "STRING" },
-          assetId: { type: "STRING" },
-          text: { type: "STRING" },
-          enabled: { type: "BOOLEAN" },
-          start: { type: "NUMBER" },
-          source: { type: "NUMBER" },
-          duration: { type: "NUMBER" },
-          at: { type: "NUMBER" },
-          rotation: { type: "NUMBER" },
-          scale: { type: "NUMBER" },
-          opacity: { type: "NUMBER" },
-          gainDb: { type: "NUMBER" },
-        },
-      },
-    },
-  },
-};
+// Translate only supported Vertex schema fields; Zod remains the strict validator.
+// Keep discriminated variants and their field ordering instead of one ambiguous
+// object with every action's optional fields.
+export function vertexSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (typeof schema.type === "string") result.type = schema.type.toUpperCase();
+  if (typeof schema.const === "string") result.enum = [schema.const];
+  else if (Array.isArray(schema.enum)) result.enum = schema.enum;
+  for (const key of ["required", "minimum", "maximum", "minItems", "maxItems"])
+    if (schema[key] !== undefined) result[key] = schema[key];
+  if (schema.properties) {
+    const properties = schema.properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+    result.properties = Object.fromEntries(
+      Object.entries(properties).map(([k, v]) => [k, vertexSchema(v)]),
+    );
+    result.propertyOrdering = Object.keys(properties);
+  }
+  if (schema.items)
+    result.items = vertexSchema(schema.items as Record<string, unknown>);
+  const variants = schema.oneOf ?? schema.anyOf;
+  if (Array.isArray(variants))
+    result.anyOf = variants.map((v) =>
+      vertexSchema(v as Record<string, unknown>),
+    );
+  return result;
+}
+const responseSchema = vertexSchema(z.toJSONSchema(aiPlanSchema));
 export function vertexEditGenerator(
   environment: NodeJS.ProcessEnv,
 ): GenerateEdit {
@@ -105,7 +85,7 @@ export function vertexEditGenerator(
                   text:
                     prompt +
                     "\nExact action variants (include ONLY fields for the chosen variant):\n" +
-                    JSON.stringify(z.toJSONSchema(aiPlanSchema)),
+                    JSON.stringify(responseSchema),
                 },
               ],
             },
@@ -113,8 +93,12 @@ export function vertexEditGenerator(
           generationConfig: {
             temperature: 0.1,
             maxOutputTokens: 8192,
+            ...(model.startsWith("gemini-2.5-")
+              ? { thinkingConfig: { thinkingBudget: 1024 } }
+              : {}),
             responseMimeType: "application/json",
-            responseSchema,
+            // This action union exceeds the deployed provider's constrained
+            // schema support. Validate the JSON locally before any approval.
           },
         }),
       },
@@ -139,7 +123,9 @@ export function vertexEditGenerator(
     if (body.candidates?.[0]?.finishReason !== "STOP")
       throw new FrameOSError(
         "PLUGIN_FAILURE",
-        "Gemini did not finish the edit plan. Shorten the request and try again.",
+        body.candidates?.[0]?.finishReason === "MAX_TOKENS"
+          ? "Gemini reached the response limit before completing the edit plan. No edits were applied. Try fewer edits per request."
+          : "Gemini did not finish the edit plan. No edits were applied. Try rephrasing the request.",
         502,
       );
     return {
@@ -297,7 +283,23 @@ export class StudioAiService {
       let proposal;
       try {
         proposal = aiPlanSchema.parse(JSON.parse(result.text));
-      } catch {
+      } catch (error) {
+        this.services.observability.record({
+          level: "warn",
+          eventType: "studio.ai.plan.invalid",
+          category: "agent",
+          projectId: project.projectId,
+          message: "AI plan failed schema validation",
+          data: {
+            issues:
+              error instanceof z.ZodError
+                ? error.issues.map((issue) => ({
+                    code: issue.code,
+                    path: issue.path,
+                  }))
+                : [{ code: "invalid_json", path: [] }],
+          },
+        });
         throw new FrameOSError(
           "PLUGIN_FAILURE",
           "Gemini returned an invalid edit plan. No edits were applied; try again.",
