@@ -8,6 +8,7 @@ import type { FastifyInstance } from "fastify";
 import type { DaemonConfig } from "../config.js";
 import { createServices, type FrameOSServices } from "../services/services.js";
 import { buildHttpServer } from "./server.js";
+import { StudioAiService } from "../studio/ai-service.js";
 
 describe("HTTP control plane", () => {
   let root: string;
@@ -46,6 +47,72 @@ describe("HTTP control plane", () => {
     expect(response.statusCode).toBe(401);
     expect(response.json().error.code).toBe("UNAUTHORIZED");
     expect(response.body).not.toContain(token);
+  });
+
+  it("exposes authenticated AI proposals with validated requests", async () => {
+    const body = {
+      projectId: createId(),
+      baseRevision: 0,
+      brief: "Trim the opening to four seconds",
+    };
+    const planned = {
+      projectId: body.projectId,
+      revision: 0,
+      summary: "Trim opening",
+      clarification: "",
+      warnings: [],
+      steps: [],
+      model: "test",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    };
+    const mock = vi
+      .spyOn(StudioAiService.prototype, "plan")
+      .mockResolvedValue(planned);
+    const ok = await app.inject({
+      method: "POST",
+      url: "/api/v1/studio/ai/plan",
+      headers: authorization,
+      payload: body,
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().data.summary).toBe("Trim opening");
+    expect(mock).toHaveBeenCalledOnce();
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/v1/studio/ai/plan",
+      headers: authorization,
+      payload: { ...body, brief: "" },
+    });
+    expect(invalid.statusCode).toBe(422);
+    const unauthorized = await app.inject({
+      method: "POST",
+      url: "/api/v1/studio/ai/plan",
+      payload: body,
+    });
+    expect(unauthorized.statusCode).toBe(401);
+  });
+
+  it("serves the visual editor and retains the advanced workbench", async () => {
+    const page = await app.inject({ method: "GET", url: "/studio" });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain("Approve & watch edits");
+    expect(page.body).toContain('id="timeline-scroll"');
+    expect(page.headers["content-security-policy"]).toContain(
+      "script-src 'self'",
+    );
+    expect(page.body).not.toContain(token);
+    const legacy = await app.inject({ method: "GET", url: "/studio/legacy" });
+    expect(legacy.body).toContain("/studio/legacy/app.js");
+    for (const path of [
+      "/studio/app.js",
+      "/studio/app.css",
+      "/studio/legacy/app.js",
+      "/studio/legacy/app.css",
+    ]) {
+      expect((await app.inject({ method: "GET", url: path })).statusCode).toBe(
+        200,
+      );
+    }
   });
 
   it("serves the browser feature lab from the inspector route", async () => {

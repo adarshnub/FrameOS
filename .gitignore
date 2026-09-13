@@ -9,3 +9,6 @@ native/engine-worker/build/
 /build/
 .DS_Store
 Thumbs.db
+studio-qa.png
+test-results/
+playwright-report/

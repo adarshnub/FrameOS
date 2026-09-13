@@ -87,7 +87,7 @@ function boundedNumber(
   return parsed;
 }
 
-function configuration(
+export function configuration(
   environment: NodeJS.ProcessEnv,
 ): GeminiConfig | undefined {
   if (environment.FRAMEOS_GEMINI_PROVIDER?.trim() !== "vertex-ai")
@@ -228,7 +228,7 @@ function run(
   });
 }
 
-class AccessTokenProvider {
+export class AccessTokenProvider {
   private cached: TokenResult | undefined;
   public constructor(private readonly config: GeminiConfig) {}
 

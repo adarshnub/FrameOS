@@ -50,7 +50,10 @@ import {
   inspectorJavaScript,
 } from "../inspector/page.js";
 import { landingCss, landingHtml, landingJavaScript } from "../site/page.js";
-import { studioCss, studioHtml, studioJavaScript } from "../studio/page.js";
+import { studioCss, studioHtml, studioJavaScript } from "../studio/editor.js";
+import * as legacyStudio from "../studio/page.js";
+import { StudioAiService } from "../studio/ai-service.js";
+import { aiPlanRequestSchema } from "../studio/ai-plan.js";
 import type { LogLevel } from "../observability/observability-service.js";
 
 const createProjectInputSchema = z
@@ -329,6 +332,26 @@ export async function buildHttpServer(
     void reply.type("text/javascript; charset=utf-8");
     return studioJavaScript;
   });
+
+  // Preserve the existing low-level tool workbench while the visual editor grows.
+  app.get("/studio/legacy", async (_request, reply) => {
+    void reply
+      .type("text/html; charset=utf-8")
+      .header(
+        "content-security-policy",
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src data: blob:; media-src blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      );
+    return legacyStudio.studioHtml.replaceAll(
+      "/studio/app.",
+      "/studio/legacy/app.",
+    );
+  });
+  app.get("/studio/legacy/app.css", async (_request, reply) =>
+    reply.type("text/css").send(legacyStudio.studioCss),
+  );
+  app.get("/studio/legacy/app.js", async (_request, reply) =>
+    reply.type("text/javascript").send(legacyStudio.studioJavaScript),
+  );
 
   app.get("/inspector", async (_request, reply) => {
     void reply
@@ -894,6 +917,16 @@ export async function buildHttpServer(
       ...(schema === undefined ? {} : { inputSchema: z.toJSONSchema(schema) }),
     });
   });
+
+  const studioAi = new StudioAiService(services);
+  app.post(
+    "/api/v1/studio/ai/plan",
+    { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+    async (request) =>
+      successEnvelope(
+        await studioAi.plan(aiPlanRequestSchema.parse(request.body)),
+      ),
+  );
 
   app.get("/api/v1/agents/providers", async () =>
     successEnvelope(services.agents.listProviders()),
