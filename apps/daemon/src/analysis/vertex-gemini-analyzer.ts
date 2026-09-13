@@ -386,13 +386,62 @@ function segmentsFromResponse(
 ): AnalysisSegment[] {
   let parsed: { segments?: unknown };
   try {
-    parsed = JSON.parse(text) as { segments?: unknown };
+    // Gemini occasionally wraps an otherwise valid JSON object in a short
+    // explanation (or emits a fenced block with a language tag).  The
+    // response is still useful, so recover the first complete JSON object
+    // before failing the analysis job.
+    const normalized = text.trim();
+    const firstObject = normalized.indexOf("{");
+    let candidate = normalized;
+    if (firstObject >= 0) {
+      // Find a balanced object boundary while respecting quoted strings.
+      let depth = 0;
+      let quoted = false;
+      let escaped = false;
+      for (let index = firstObject; index < normalized.length; index += 1) {
+        const character = normalized[index];
+        if (quoted) {
+          if (escaped) escaped = false;
+          else if (character === "\\") escaped = true;
+          else if (character === '"') quoted = false;
+          continue;
+        }
+        if (character === '"') quoted = true;
+        else if (character === "{") depth += 1;
+        else if (character === "}" && --depth === 0) {
+          candidate = normalized.slice(firstObject, index + 1);
+          break;
+        }
+      }
+    }
+    parsed = JSON.parse(candidate) as { segments?: unknown };
   } catch {
-    throw new FrameOSError(
-      "PLUGIN_FAILURE",
-      "Gemini did not return valid JSON analysis",
-      502,
-    );
+    // Preserve a usable artifact when the model answers in prose despite the
+    // JSON instruction.  The planner can still use the narrative as context,
+    // and a single bounded segment is safer than discarding the whole job.
+    const summary = text.replace(/\s+/gu, " ").trim().slice(0, 4_000);
+    if (summary) {
+      parsed = {
+        segments: [
+          {
+            summary,
+            searchTerms: ["reference", "editing style"],
+            objects: [],
+            activities: [],
+            startSeconds: 0,
+            ...(durationMs === undefined
+              ? {}
+              : { endSeconds: durationMs / 1_000 }),
+          },
+        ],
+      };
+    } else {
+      throw new FrameOSError(
+        "PLUGIN_FAILURE",
+        "Gemini did not return valid JSON analysis",
+        502,
+      );
+    }
   }
   if (!Array.isArray(parsed.segments))
     throw new FrameOSError(
