@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
@@ -92,6 +92,32 @@ function tokenMatches(
   return (
     supplied.length === expected.length && timingSafeEqual(supplied, expected)
   );
+}
+
+const studioCookieName = "frameos_studio";
+const studioSessionTtlMs = 7 * 24 * 60 * 60 * 1_000;
+
+function studioSession(password: string, issuedAt: number): string {
+  const payload = issuedAt.toString(36);
+  const signature = createHmac("sha256", password).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function studioSessionMatches(cookie: string | undefined, password: string | undefined): boolean {
+  if (!cookie || !password) return false;
+  const [payload, supplied] = cookie.split(".");
+  if (!payload || !supplied) return false;
+  const issuedAt = Number.parseInt(payload, 36);
+  if (!Number.isFinite(issuedAt) || Date.now() - issuedAt > studioSessionTtlMs || issuedAt > Date.now() + 60_000) return false;
+  const expected = createHmac("sha256", password).update(payload).digest("base64url");
+  const a = Buffer.from(supplied); const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function cookieValue(request: { headers: Record<string, string | string[] | undefined> }, name: string): string | undefined {
+  const raw = request.headers.cookie;
+  if (typeof raw !== "string") return undefined;
+  return raw.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
 }
 
 function requestAuthorization(request: {
@@ -223,11 +249,19 @@ export async function buildHttpServer(
 
   const requestStartedAt = new WeakMap<object, bigint>();
 
-  app.addHook("onRequest", async (request) => {
+  app.addHook("onRequest", async (request, reply) => {
     requestStartedAt.set(request, process.hrtime.bigint());
+    if (request.url.startsWith("/studio") && !request.url.startsWith("/studio/app.")) {
+      if (services.config.studioPassword && !studioSessionMatches(cookieValue(request, studioCookieName), services.config.studioPassword)) {
+        return reply.redirect(`/login?next=${encodeURIComponent(request.url)}`);
+      }
+    }
     if (!isProtectedPath(request.url)) return;
-    const grant = authorize(
-      requestAuthorization(request),
+    const header = requestAuthorization(request);
+    const grant = services.config.studioPassword && studioSessionMatches(cookieValue(request, studioCookieName), services.config.studioPassword)
+      ? { id: "studio-session", scope: requiredScope(request.url, request.method) }
+      : authorize(
+      header,
       services.config,
       requiredScope(request.url, request.method),
     );
@@ -313,6 +347,18 @@ export async function buildHttpServer(
   app.get("/site/app.js", async (_request, reply) => {
     void reply.type("text/javascript; charset=utf-8");
     return landingJavaScript;
+  });
+
+  app.get("/login", async (_request, reply) => {
+    void reply.type("text/html; charset=utf-8");
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FrameOS Studio — Sign in</title><style>@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600&display=swap');*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d0f;color:#f1f3f2;font-family:'Space Grotesk',sans-serif}main{width:min(420px,calc(100vw - 40px));padding:38px;border:1px solid #2d3835;border-radius:18px;background:linear-gradient(145deg,#151b1a,#0e1213);box-shadow:0 24px 80px #0009}.mark{display:flex;align-items:center;gap:10px;font:500 13px 'DM Mono',monospace;letter-spacing:.08em;color:#a9f2d2}.mark b{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#a9f2d2;color:#11221b;font-size:17px}h1{margin:32px 0 8px;font-size:30px;letter-spacing:-.04em}p{margin:0 0 28px;color:#9aa8a3;line-height:1.6}label{display:block;color:#9aa8a3;font:12px 'DM Mono',monospace;letter-spacing:.06em}input{width:100%;margin-top:9px;padding:13px 14px;border:1px solid #34423d;border-radius:9px;background:#0b0e0e;color:#fff;font:15px 'DM Mono',monospace}button{width:100%;margin-top:18px;padding:13px;border:0;border-radius:9px;background:#a9f2d2;color:#10231b;font:600 14px 'Space Grotesk',sans-serif;cursor:pointer}button:hover{filter:brightness(1.08)}#error{min-height:20px;margin-top:14px;color:#ff9c9c;font-size:13px}small{display:block;margin-top:26px;color:#68766f;font:11px 'DM Mono',monospace}</style></head><body><main><div class="mark"><b>F</b> FRAMEOS / STUDIO</div><h1>Welcome back.</h1><p>Sign in to open your collaborative video workspace.</p><form><label for="password">STUDIO PASSWORD<input id="password" type="password" autocomplete="current-password" autofocus></label><button>Enter studio</button><div id="error" role="alert"></div></form><small>Your session is encrypted and expires after 7 days.</small></main><script>const next=new URLSearchParams(location.search).get('next')||'/studio';document.querySelector('form').addEventListener('submit',async e=>{e.preventDefault();const error=document.querySelector('#error');error.textContent='';const r=await fetch('/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:document.querySelector('#password').value})});if(r.ok)location.assign(next);else error.textContent='That password was not accepted.';});</script></body></html>`;
+  });
+  app.post("/login", async (request, reply) => {
+    const password = services.config.studioPassword;
+    const supplied = typeof request.body === "object" && request.body !== null && "password" in request.body ? (request.body as { password?: unknown }).password : undefined;
+    if (!password || typeof supplied !== "string" || supplied.length === 0 || !tokenMatches(`Bearer ${supplied}`, password)) return reply.code(401).send({ error: "Invalid password" });
+    const value = studioSession(password, Date.now());
+    return reply.header("set-cookie", `${studioCookieName}=${value}; Path=/; Max-Age=${Math.floor(studioSessionTtlMs / 1000)}; HttpOnly; Secure; SameSite=Lax`).send({ ok: true });
   });
 
   app.get("/studio", async (_request, reply) => {

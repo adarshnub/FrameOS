@@ -26,6 +26,7 @@ export interface DaemonConfig {
   dataDirectory: string;
   authToken: string;
   authTokenPath: string;
+  studioPassword?: string;
   allowedMediaRoots: string[];
   remoteMode: boolean;
   tlsCertificatePath?: string;
@@ -281,6 +282,9 @@ export async function loadConfig(
     dataDirectory,
     authToken: token,
     authTokenPath: tokenPath,
+    ...(environment.FRAMEOS_STUDIO_PASSWORD === undefined
+      ? {}
+      : { studioPassword: environment.FRAMEOS_STUDIO_PASSWORD }),
     allowedMediaRoots,
     remoteMode,
     workspaceRoot,
