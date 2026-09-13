@@ -175,24 +175,15 @@ function run(
   signal: AbortSignal,
 ): Promise<string> {
   return new Promise((resolveResult, rejectResult) => {
+    const executable = command.trim().replace(/^"(.*)"$/, "$1");
     const child =
       process.platform === "win32"
         ? spawn(
             process.env.ComSpec ?? "cmd.exe",
-            [
-              "/d",
-              "/s",
-              "/c",
-              `call "${command.replaceAll('"', "")}" ${arguments_
-                .map((argument) => `"${argument.replaceAll('"', "")}"`)
-                .join(" ")}`,
-            ],
-            {
-              windowsHide: true,
-              stdio: ["ignore", "pipe", "pipe"],
-            },
+            ["/d", "/c", "call", executable, ...arguments_],
+            { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
           )
-        : spawn(command, arguments_, {
+        : spawn(executable, arguments_, {
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
           });
