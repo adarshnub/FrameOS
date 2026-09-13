@@ -1,0 +1,40 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --no-cache
+      - -t
+      - ${_IMAGE}:$COMMIT_SHA
+      - -t
+      - ${_IMAGE}:latest
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args: [push, '${_IMAGE}:$COMMIT_SHA']
+  - name: gcr.io/cloud-builders/docker
+    args: [push, '${_IMAGE}:latest']
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        gcloud compute ssh ${_VM_NAME} \
+          --zone=${_VM_ZONE} \
+          --project=${PROJECT_ID} \
+          --tunnel-through-iap \
+          --ssh-flag='-oStrictHostKeyChecking=no' \
+          --quiet \
+          --command='set -euo pipefail
+            gcloud auth print-access-token | sudo docker login -u oauth2accesstoken --password-stdin https://${_REGION}-docker.pkg.dev >/dev/null
+            sudo docker pull ${_IMAGE}:$COMMIT_SHA
+            sudo docker rm -f frameos >/dev/null 2>&1 || true
+            sudo docker run -d --name frameos --restart always --env-file /opt/frameos/.env -v /opt/frameos/data:/app/.frameos-data -p 31415:31415 ${_IMAGE}:$COMMIT_SHA
+            sleep 4
+            test "$(sudo docker inspect -f "{{.State.Running}}" frameos)" = "true"'
+substitutions:
+  _REGION: asia-south1
+  _IMAGE: asia-south1-docker.pkg.dev/gen-lang-client-0644821693/frameos/frameos-daemon
+  _VM_NAME: frameos-studio
+  _VM_ZONE: asia-south1-a
+timeout: 1800s
+options:
+  logging: CLOUD_LOGGING_ONLY
