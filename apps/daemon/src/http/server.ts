@@ -50,6 +50,11 @@ import {
   inspectorJavaScript,
 } from "../inspector/page.js";
 import { landingCss, landingHtml, landingJavaScript } from "../site/page.js";
+import {
+  developerCss,
+  developerLinkedinCss,
+  withDeveloperSection,
+} from "../site/developer-section.js";
 import { studioCss, studioHtml, studioJavaScript } from "../studio/editor.js";
 import * as legacyStudio from "../studio/page.js";
 import { StudioAiService } from "../studio/ai-service.js";
@@ -378,7 +383,7 @@ export async function buildHttpServer(
         "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
       )
       .type("text/html; charset=utf-8");
-    return landingHtml;
+    return withDeveloperSection(landingHtml);
   });
   app.get("/site/editor.png", async (_request, reply) => {
     return reply
@@ -392,7 +397,7 @@ export async function buildHttpServer(
   });
   app.get("/site/app.css", async (_request, reply) => {
     void reply.type("text/css; charset=utf-8");
-    return landingCss;
+    return landingCss + developerCss + developerLinkedinCss;
   });
   app.get("/site/app.js", async (_request, reply) => {
     void reply.type("text/javascript; charset=utf-8");
