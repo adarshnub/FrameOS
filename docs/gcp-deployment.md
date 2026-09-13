@@ -71,3 +71,12 @@ The project currently shows an available free-trial credit of ₹28,690.09,
 valid through November 10, 2026. Google Cloud budgets/spend caps should be
 configured in the Billing console before leaving this VM running; spend-cap
 enforcement can have reporting latency.
+
+## Automatic deployments
+
+`cloudbuild.yaml` builds the daemon image and rolls it out to `frameos-studio`
+over IAP. A Cloud Build GitHub trigger still needs one-time authorization in
+Google Cloud for `adarshnub/FrameOS`; no GitHub connection currently exists, so
+Google Cloud rejects trigger creation from the CLI. After authorizing the
+repository, create a push trigger for `main` using this file. The project
+service account has the IAP SSH and VM deployment roles required by the file.
