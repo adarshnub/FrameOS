@@ -164,10 +164,13 @@ For a NEW montage create a new video track and add selected media consecutively 
 For modifying an existing/selected clip, edit it in place; do not create an unrelated montage. Respect locked tracks/items. Never add overlapping items to the same track.
 Use indexed analysis to choose requested highlights, not invented scene timestamps. If there is no analysis, explain that in warnings and use explicit user ranges or request clarification for content-based decisions.
 Honor requested durations, source in-points, title wording, volume, rotation, scale and ordering. Preserve picture values not requested to change.
-Titles must use a separate video track above footage. Browser supports basic text, not full typography. Audio-only tracks aren't mixed in browser preview.
+Titles must use a separate video track above footage. Browser supports basic text, not full typography.
+Independent sound editing: create an audio track, detach_audio(item, ref, track), then trim/split/move/process the detached alias. Detach preserves timing, source range and audio processing and mutes the video to avoid doubled sound. Never use clip extraction as audio extraction. Video and audio can then be edited independently. link(item, other, linked:true) reattaches them as a linked pair while preserving each edit and offset; it does not bake media, restore discarded sound, align timing, or unmute the video. Use linked:false to unlink. Use explicit move actions for BOTH members when moving a linked pair; linking is a relationship, not implicit group editing. Splitting creates a right-side alias; inspect links afterwards. Never unmute the original when the detached audio is still audible unless doubling is requested.
+Audio actions: volume uses absolute dB; mute toggles audio only; pan is -1 left to +1 right. audio_fade adds a clip-edge fade with duration in timeline seconds. audio_reset removes the named processing group or all channel-strip effects (not volume/pan/mute). Use reset fades before replacing an existing fade. audio_eq replaces the EQ bands, audio_compress/limit/normalize/denoise set the corresponding stage. Speech enhancement is an explicit denoise + 80Hz high-pass/presence EQ + compressor preset, not generative restoration; it replaces those stages. audio_duck lowers the target over the sidechain CLIP'S TIMELINE SPAN, with attack/release seconds and reductionDb; this is not speech/silence detection or amplitude-triggered sidechaining. Apply ducking last after timing edits and recompute it if timing changes. It requires an unretimed target and an audible overlapping sidechain clip. Audio cannot be judged from still images. Browser mixing is an approximation; normalization, denoise and final sound quality need native export/listening. Avoid clipping; don't promise inaudible repair or source separation of music/voice.
+speed is absolute source playback ratio: 0.5 half-speed/slow motion, 2 double-speed, 1 normal. It changes timeline duration and is rounded to the nearest frame. Move later clips explicitly to prevent gaps/overlaps; independent audio keeps its timing unless also edited. reverse reverses the source over the current duration. freeze uses an absolute source second within the clip. speed_ramp has duration (timeline seconds) and ordered points {at: local timeline seconds, source: absolute source seconds}, starting at 0 and ending at duration; source points must be non-descending and within the clip source range. Its segments are linear, including repeated source values for holds. Slopes set playback rates. Trim/split in forward retimed clips is supported; reverse trims may need clarification. No optical-flow frame synthesis is available. Browser reverse/holds are silent frame-seek approximations; native render is required for final retimed playback quality.
 For reference-guided edits, use referenceAnalysis as a style guide only. Never add the reference asset to the output. Match observed shot durations, pacing changes, shot roles and highlight emphasis using analyzed ranges from selected source assets. Explain the match and any uncertainty in summary and warnings. The brief takes precedence over stylistic matching. Do not copy reference text unless requested. Default to a new montage preserving the original timeline.
-Hard cuts use adjacent clips. Dissolves use transition actions AFTER adding both adjacent video clips on one track. Each dissolve is centered on their shared cut, so reserve half its duration in source handles after the outgoing clip and before the incoming clip. Leave adequate handles when choosing source in-points. Do not overlap clips. Use only observed dissolves, never invent effects.
-Unsupported reference effects (wipes, zoom transitions, color grading, reverse, complex speed ramps, keyframes, masks, full audio mixing) may be approximated with hard cuts, basic picture changes or dissolves only when explicitly explained in warnings. If the brief requires an exact unsupported effect, ask for clarification with no actions. Rendered export requires a configured native worker.
+Hard cuts use adjacent clips. transition kind dissolve uses adjacent video clips; audio_crossfade uses adjacent audio clips. Add transitions AFTER editing both clips. Each is centered on the shared cut, so reserve half its duration in source handles after the outgoing clip and before the incoming clip. Duration sets transition pace. Clips must be unretimed; never mix speed changes and a transition on the same clip. Do not overlap clips. To change a transition, delete its item and create a replacement of the desired duration with the same endpoints. Use requested effects or observed reference transitions, never invent reference evidence.
+Unsupported effects (wipes, masks, optical flow, arbitrary plugins, audio bus routing, signal-triggered sidechains and generative source separation) require clarification when exact reproduction is requested. Never claim every imaginable edit is available. Rendered export requires a configured native worker and its effect capabilities.
 If ambiguous, set clarification to one concise question and actions to []. Otherwise clarification is empty. Limit to 60 actions. Every label must accurately describe the operation with time ranges or values. Never claim execution; this is a proposed plan.`;
 
 export class StudioAiService {
@@ -349,6 +352,7 @@ export class StudioAiService {
           kind: t.kind,
           enabled: t.enabled,
           locked: t.locked,
+          muted: t.muted,
           items: t.items.map((i) => ({
             id: i.id,
             name: i.name,
@@ -363,8 +367,25 @@ export class StudioAiService {
                   sourceDuration: toSeconds(i.sourceRange.duration),
                   transform: i.transform,
                   gainDb: i.audio.gainDb,
+                  audio: i.audio,
+                  links: i.links,
+                  metadata: i.metadata,
+                  effects: i.effects,
+                  timeMap: i.timeMap.map((k) => ({
+                    at: toSeconds(k.time),
+                    source:
+                      (Number(k.value) * i.sourceRange.start.rate.denominator) /
+                      i.sourceRange.start.rate.numerator,
+                    interpolation: k.interpolation,
+                  })),
                 }
-              : {}),
+              : i.type === "transition"
+                ? {
+                    from: i.fromItemId,
+                    to: i.toItemId,
+                    capabilityId: i.capabilityId,
+                  }
+                : {}),
           })),
         })),
         analysis: analysis.map((r) => ({
@@ -436,7 +457,21 @@ export class StudioAiService {
       let steps;
       if (proposal.actions.some((a) => a.type === "transition"))
         proposal.warnings.push(
-          "Dissolves are saved as timeline transitions. Native export requires the MLT luma capability.",
+          "Transitions require native rendering for final quality; browser audio crossfades are approximate.",
+        );
+      if (
+        proposal.actions.some(
+          (a) =>
+            a.type.startsWith("audio_") ||
+            ["speed", "speed_ramp", "reverse", "freeze"].includes(a.type),
+        )
+      )
+        proposal.warnings.push(
+          "Browser playback is a preview. Native rendering is required to verify denoising, loudness normalization and final retimed audio. Still-image review cannot assess sound.",
+        );
+      if (proposal.actions.some((a) => a.type === "audio_duck"))
+        proposal.warnings.push(
+          "Ducking follows the chosen clip's timeline span, including any silence. Reapply it after timing changes.",
         );
       try {
         steps =

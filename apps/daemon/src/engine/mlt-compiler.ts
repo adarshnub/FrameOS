@@ -1534,6 +1534,7 @@ function compileAudioNormalization(
 }
 
 const audioChannelStripParameterNames = new Set([
+  "timelineDuck",
   "fades",
   "denoise",
   "eq",
@@ -1591,6 +1592,13 @@ function compileAudioChannelStrip(
   }
 
   return [
+    ...compileTimelineDuck(
+      targetId,
+      effect,
+      targetSpan,
+      sequence.format.sampleRate,
+      options,
+    ),
     ...compileAudioDenoise(targetId, effect, options),
     ...compileAudioEq(targetId, effect, sequence.format.sampleRate, options),
     ...compileAudioCompressor(targetId, effect, options),
@@ -1604,6 +1612,79 @@ function compileAudioChannelStrip(
       options,
     ),
   ];
+}
+
+/** Explicit timeline ducking: lower the bed over a chosen voice clip's span.
+ * This is not signal-triggered sidechain compression. */
+function compileTimelineDuck(
+  targetId: string,
+  effect: EffectInstance,
+  span: AudioSampleSpan,
+  sampleRate: number,
+  options: MltCompilerOptions,
+): string[] {
+  const value = effect.parameters.timelineDuck;
+  if (value === undefined) return [];
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Invalid timeline ducking envelope",
+      422,
+    );
+  const duck = value as ParameterObject;
+  assertParameterKeys(effect, "timelineDuck", duck, [
+    "start",
+    "end",
+    "reductionDb",
+    "attack",
+    "release",
+  ]);
+  const start = audioNumber(effect, "timelineDuck", duck, "start", 0, 86400);
+  const end = audioNumber(effect, "timelineDuck", duck, "end", 0, 86400);
+  const reduction = audioNumber(
+    effect,
+    "timelineDuck",
+    duck,
+    "reductionDb",
+    0,
+    60,
+  );
+  const attack = audioNumber(
+    effect,
+    "timelineDuck",
+    duck,
+    "attack",
+    0.000001,
+    86400,
+  );
+  const release = audioNumber(
+    effect,
+    "timelineDuck",
+    duck,
+    "release",
+    0.000001,
+    86400,
+  );
+  if (end <= start || end > span.duration / sampleRate + 1 / sampleRate)
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "Ducking envelope exceeds the audio clip",
+      422,
+    );
+  const origin = span.start / sampleRate;
+  const s = formatNumber(start + origin),
+    e = formatNumber(end + origin);
+  // Numeric values only. FFmpeg evaluates t on the source producer's clock.
+  const envelope = `min(1,max(0,(t-${s})/${formatNumber(attack)}))*min(1,max(0,(${e}+${formatNumber(release)}-t)/${formatNumber(release)}))`;
+  requireCapability(options, capabilityIds.volume, "Timeline audio ducking");
+  return compileFilter(
+    `filter_duck_${targetId}_${effect.id}`,
+    "avfilter.volume",
+    [
+      ["av.volume", `pow(10,(-${formatNumber(reduction)}*${envelope})/20)`],
+      ["av.eval", "frame"],
+    ],
+  );
 }
 
 function compileClipEffects(

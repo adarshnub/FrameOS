@@ -4,16 +4,19 @@ import {
   fromSeconds,
   toSeconds,
   operationSchema,
+  clipSchema,
   FrameOSError,
   type Project,
   type Operation,
 } from "@frameos/contracts";
 import { executeOperations } from "../domain/operation-executor.js";
+import { mediaActionSchemas } from "./ai-media-actions.js";
 
 const ref = z.string().min(1).max(100);
 const seconds = z.number().finite().min(0).max(86400);
 const base = { label: z.string().min(1).max(300) };
 export const aiActionSchema = z.discriminatedUnion("type", [
+  ...mediaActionSchemas,
   z
     .object({
       ...base,
@@ -21,7 +24,7 @@ export const aiActionSchema = z.discriminatedUnion("type", [
       from: ref,
       to: ref,
       duration: z.number().finite().min(0.08).max(3),
-      kind: z.literal("dissolve"),
+      kind: z.enum(["dissolve", "audio_crossfade"]),
     })
     .strict(),
   z
@@ -193,7 +196,10 @@ export function compileAiPlan(
   const seq = () => project.sequences[project.settings.defaultSequenceId]!;
   const id = (value: string) => aliases.get(value) || value;
   const newRef = (value: string) => {
-    if (aliases.has(value) || JSON.stringify(source).includes(value))
+    if (
+      aliases.has(value) ||
+      JSON.stringify(source).includes(JSON.stringify(value))
+    )
       throw new Error("AI reused an existing reference: " + value);
     const next = createId();
     aliases.set(value, next);
@@ -228,12 +234,401 @@ export function compileAiPlan(
     if (duration <= 0 || start + duration > limit + 1 / 30)
       throw Error("AI requested a range outside the source media.");
   };
+  const emit = (
+    label: string,
+    type: string,
+    args: unknown,
+    targetId?: string,
+  ) => {
+    const op = operationSchema.parse({
+      operationId: createId(),
+      type,
+      arguments: args,
+      ...(targetId ? { targetId } : {}),
+      preconditions: [],
+      provenance: { actorType: "agent", actorId: "studio.gemini-editor" },
+    });
+    project = executeOperations(project, [op]).project;
+    steps.push({ label, op, ...(targetId ? { itemId: targetId } : {}) });
+  };
   for (const a of plan.actions) {
     let type: string, args: unknown, targetId: string | undefined;
     let itemId: string | undefined,
       assetId: string | undefined,
       trackId: string | undefined;
     const sequenceId = seq().id;
+    if (
+      mediaActionSchemas.some((schema) => schema.shape.type.value === a.type)
+    ) {
+      // Validate again here to narrow the extended action union.
+      const action = z.discriminatedUnion("type", mediaActionSchemas).parse(a);
+      const { track, item } = locate(action.item);
+      if (item.type !== "clip")
+        throw Error("This action requires a media clip.");
+      const target = { sequenceId, trackId: track.id };
+      const replace = (clip: typeof item) =>
+        emit(action.label, "item.replace", { ...target, item: clip }, item.id);
+      if (action.type === "detach_audio") {
+        const asset = project.assets[item.assetId]!;
+        const destination = seq().tracks.find((t) => t.id === id(action.track));
+        if (track.kind !== "video" || asset.kind !== "video")
+          throw Error("Detach audio requires a video clip.");
+        if (
+          asset.streams.length &&
+          !asset.streams.some((s) => s.kind === "audio")
+        )
+          throw Error("This video has no audio stream.");
+        if (!destination || destination.kind !== "audio" || destination.locked)
+          throw Error("Choose an unlocked audio track for detached audio.");
+        if (item.metadata.detachedAudioId)
+          throw Error("This clip's audio is already detached.");
+        const audioId = newRef(action.ref);
+        const copyWithFreshIds = <T>(value: T): T =>
+          JSON.parse(JSON.stringify(value), (key, v) =>
+            key === "id" ? createId() : v,
+          ) as T;
+        const audio = {
+          ...structuredClone(item),
+          id: audioId,
+          name: item.name + " · audio",
+          links: [],
+          transform: {},
+          timeMap: copyWithFreshIds(item.timeMap),
+          effects: copyWithFreshIds(
+            item.effects.filter((e) =>
+              e.capabilityId.startsWith("frameos.audio."),
+            ),
+          ),
+          metadata: { ...item.metadata, detachedFromId: item.id },
+        };
+        // One reversible operation: Stop/Undo cannot leave duplicated sound.
+        const sequence = structuredClone(seq());
+        sequence.tracks
+          .find((t) => t.id === destination.id)!
+          .items.push(clipSchema.parse(audio));
+        const original = sequence.tracks
+          .find((t) => t.id === track.id)!
+          .items.find((i) => i.id === item.id)!;
+        if (original.type === "clip") {
+          original.audio.muted = true;
+          original.metadata.detachedAudioId = audioId;
+        }
+        emit(action.label, "sequence.replace", { sequence }, sequenceId);
+        steps.at(-1)!.itemId = audioId;
+      } else if (action.type === "link") {
+        const other = locate(action.other);
+        if (other.item.type !== "clip")
+          throw Error("Only media clips can be linked.");
+        emit(
+          action.label,
+          action.linked ? "clip.link" : "clip.unlink",
+          {
+            ...target,
+            otherTrackId: other.track.id,
+            otherClipId: other.item.id,
+          },
+          item.id,
+        );
+      } else if (action.type === "mute") {
+        replace({ ...item, audio: { ...item.audio, muted: action.muted } });
+      } else if (action.type === "pan") {
+        emit(
+          action.label,
+          "audio.pan.set",
+          { ...target, pan: action.pan },
+          item.id,
+        );
+      } else if (
+        action.type === "speed" ||
+        action.type === "reverse" ||
+        action.type === "freeze"
+      ) {
+        const keys = {
+          ...target,
+          startKeyframeId: createId(),
+          endKeyframeId: createId(),
+        };
+        if (action.type === "speed") {
+          let sourceRange = item.sourceRange;
+          if (item.timeMap.length) {
+            const values = item.timeMap.map((k) => Number(k.value));
+            const start = Math.min(...values),
+              finish = Math.max(...values);
+            if (finish > start) {
+              sourceRange = {
+                start: { ...item.sourceRange.start, value: start },
+                duration: {
+                  rate: item.sourceRange.start.rate,
+                  value: finish - start,
+                },
+              };
+              replace({ ...item, sourceRange, timeMap: [] });
+            }
+          }
+          // Round the output duration to a frame, then use the exact resulting ratio.
+          const sourceFrames = time(toSeconds(sourceRange.duration)).value;
+          const outputFrames = Math.max(
+            1,
+            Math.round(sourceFrames / action.speed),
+          );
+          emit(
+            action.label,
+            "clip.speed.set",
+            {
+              ...keys,
+              speed: { numerator: sourceFrames, denominator: outputFrames },
+            },
+            item.id,
+          );
+        } else if (action.type === "freeze") {
+          sourceBounds(item.assetId, action.source, 1 / 30);
+          if (
+            action.source < toSeconds(item.sourceRange.start) ||
+            action.source >=
+              toSeconds(item.sourceRange.start) +
+                toSeconds(item.sourceRange.duration)
+          )
+            throw Error("Freeze frame must be inside the clip's source range.");
+          emit(
+            action.label,
+            "clip.freeze_frame",
+            {
+              ...keys,
+              sourceTime: fromSeconds(
+                action.source,
+                item.sourceRange.start.rate,
+              ).time,
+            },
+            item.id,
+          );
+        } else emit(action.label, "clip.reverse", keys, item.id);
+      } else if (action.type === "speed_ramp") {
+        if (
+          action.points[0]!.at !== 0 ||
+          action.points.at(-1)!.at !== action.duration
+        )
+          throw Error(
+            "Speed ramp points must span the full timeline duration.",
+          );
+        const sourceStart = toSeconds(item.sourceRange.start),
+          sourceEnd = sourceStart + toSeconds(item.sourceRange.duration);
+        const points = action.points;
+        for (let n = 0; n < points.length; n++) {
+          const point = points[n]!;
+          if (
+            point.source < sourceStart ||
+            point.source > sourceEnd ||
+            (n &&
+              (time(point.at).value <= time(points[n - 1]!.at).value ||
+                point.source < points[n - 1]!.source))
+          )
+            throw Error(
+              "Speed ramps require increasing frame-aligned timeline points and non-descending source times inside the clip.",
+            );
+        }
+        emit(
+          action.label,
+          "clip.speed_ramp.set",
+          {
+            ...target,
+            timelineDuration: time(action.duration),
+            keyframes: points.map((p) => ({
+              id: createId(),
+              time: time(p.at),
+              value: fromSeconds(p.source, item.sourceRange.start.rate).time
+                .value,
+              interpolation: "linear",
+            })),
+          },
+          item.id,
+        );
+      } else {
+        let effect = item.effects.find(
+          (e) =>
+            e.capabilityId === "frameos.audio.channel-strip" &&
+            e.enabled &&
+            !e.range &&
+            !e.automationCurves.length,
+        );
+        if (action.type === "audio_reset") {
+          replace({
+            ...item,
+            effects: item.effects.flatMap((e) => {
+              if (e.capabilityId !== "frameos.audio.channel-strip") return [e];
+              if (action.processing === "all") return [];
+              const parameters = { ...e.parameters };
+              delete parameters[action.processing];
+              return [{ ...e, parameters }];
+            }),
+          });
+          continue;
+        }
+        if (!effect) {
+          effect = {
+            id: createId(),
+            capabilityId: "frameos.audio.channel-strip",
+            version: "1.0.0",
+            enabled: true,
+            parameters: {},
+            automationCurves: [],
+          };
+          replace({ ...item, effects: [...item.effects, effect] });
+        }
+        const effectArgs = { ...target, effectId: effect.id };
+        const {
+          type: actionType,
+          label: _label,
+          item: _item,
+          ...parameters
+        } = action;
+        if (action.type === "audio_fade") {
+          if (
+            time(action.duration).value <= 0 ||
+            action.duration > toSeconds(item.timelineRange.duration)
+          )
+            throw Error("Audio fade must fit the clip duration.");
+          emit(
+            action.label,
+            "audio.fade.add",
+            {
+              ...effectArgs,
+              fade: {
+                id: createId(),
+                kind: action.kind,
+                duration: time(action.duration),
+                curve: action.curve,
+              },
+            },
+            item.id,
+          );
+        } else if (action.type === "audio_eq") {
+          if (
+            action.bands.some(
+              (b) =>
+                b.frequencyHz >= seq().format.sampleRate / 2 ||
+                (["low_cut", "high_cut"].includes(b.kind) && b.gainDb !== 0),
+            )
+          )
+            throw Error(
+              "EQ frequencies must be below Nyquist; cut filters require zero gain.",
+            );
+          emit(
+            action.label,
+            "audio.eq.set",
+            {
+              ...effectArgs,
+              bands: action.bands.map((band) => ({ ...band, id: createId() })),
+            },
+            item.id,
+          );
+        } else if (action.type === "audio_enhance_voice") {
+          emit(
+            action.label + " · noise reduction",
+            "audio.denoise",
+            { ...effectArgs, amount: action.amount * 0.5 },
+            item.id,
+          );
+          emit(
+            action.label + " · speech EQ",
+            "audio.eq.set",
+            {
+              ...effectArgs,
+              bands: [
+                {
+                  id: createId(),
+                  kind: "low_cut",
+                  frequencyHz: 80,
+                  gainDb: 0,
+                  q: 0.707,
+                  enabled: true,
+                },
+                {
+                  id: createId(),
+                  kind: "bell",
+                  frequencyHz: 3000,
+                  gainDb: action.amount * 3,
+                  q: 0.707,
+                  enabled: true,
+                },
+              ],
+            },
+            item.id,
+          );
+          emit(
+            action.label + " · compression",
+            "audio.compress",
+            {
+              ...effectArgs,
+              thresholdDb: -18,
+              ratio: 1 + action.amount * 2,
+              attackMs: 10,
+              releaseMs: 150,
+              kneeDb: 6,
+              makeupGainDb: 0,
+            },
+            item.id,
+          );
+        } else if (action.type === "audio_duck") {
+          const other = locate(action.sidechain);
+          if (
+            other.item.type !== "clip" ||
+            other.item.id === item.id ||
+            !other.item.enabled ||
+            !other.track.enabled ||
+            other.track.muted ||
+            other.item.audio.muted
+          )
+            throw Error("Ducking requires a different audible sidechain clip.");
+          if (item.timeMap.length)
+            throw Error(
+              "Apply timeline ducking after finalizing timing on an unretimed audio clip.",
+            );
+          const start = Math.max(
+            0,
+            toSeconds(other.item.timelineRange.start) -
+              toSeconds(item.timelineRange.start),
+          );
+          const finish = Math.min(
+            toSeconds(item.timelineRange.duration),
+            toSeconds(other.item.timelineRange.start) +
+              toSeconds(other.item.timelineRange.duration) -
+              toSeconds(item.timelineRange.start),
+          );
+          if (finish <= start)
+            throw Error("The ducked clip and sidechain must overlap in time.");
+          const latest = locate(item.id).item;
+          if (latest.type !== "clip") throw Error("Audio clip disappeared.");
+          replace({
+            ...latest,
+            effects: latest.effects.map((e) =>
+              e.id === effect.id
+                ? {
+                    ...e,
+                    parameters: {
+                      ...e.parameters,
+                      timelineDuck: {
+                        start,
+                        end: finish,
+                        reductionDb: action.reductionDb,
+                        attack: action.attack,
+                        release: action.release,
+                      },
+                    },
+                  }
+                : e,
+            ),
+          });
+        } else {
+          emit(
+            action.label,
+            actionType.replace("audio_", "audio."),
+            { ...effectArgs, ...parameters },
+            item.id,
+          );
+        }
+      }
+      continue;
+    }
     if (a.type === "track") {
       trackId = newRef(a.ref);
       type = "track.add";
@@ -295,7 +690,7 @@ export function compileAiPlan(
         right = locate(a.to);
       if (
         left.track.id !== right.track.id ||
-        left.track.kind !== "video" ||
+        left.track.kind !== (a.kind === "dissolve" ? "video" : "audio") ||
         left.item.type !== "clip" ||
         right.item.type !== "clip"
       )
@@ -306,8 +701,9 @@ export function compileAiPlan(
         !right.item.enabled ||
         left.item.timeMap.length ||
         right.item.timeMap.length ||
-        project.assets[left.item.assetId]?.kind !== "video" ||
-        project.assets[right.item.assetId]?.kind !== "video"
+        (a.kind === "dissolve" &&
+          (project.assets[left.item.assetId]?.kind !== "video" ||
+            project.assets[right.item.assetId]?.kind !== "video"))
       )
         throw Error("Dissolves require enabled, unretimed video clips.");
       const leftEnd =
@@ -357,8 +753,8 @@ export function compileAiPlan(
         transition: {
           id: itemId,
           type: "transition",
-          name: "Dissolve",
-          capabilityId: "frameos.transition.dissolve",
+          name: a.kind === "dissolve" ? "Dissolve" : "Audio crossfade",
+          capabilityId: "frameos.transition." + a.kind,
           fromItemId: left.item.id,
           toItemId: right.item.id,
           timelineRange: range(cut - half, duration),
@@ -398,6 +794,7 @@ export function compileAiPlan(
       targetId = trackId;
       args = { sequenceId, values: { enabled: a.enabled } };
     } else {
+      if (!("item" in a)) throw Error("Unknown AI action.");
       const { track, item } = locate(a.item);
       targetId = itemId = item.id;
       trackId = track.id;
@@ -421,8 +818,6 @@ export function compileAiPlan(
         };
       } else {
         if (item.type !== "clip") throw Error("AI action requires a clip.");
-        if (item.timeMap.length)
-          throw Error("AI cannot edit complex retimed clips yet.");
         assetId = item.assetId;
         switch (a.type) {
           case "trim":
@@ -432,6 +827,8 @@ export function compileAiPlan(
               sequenceId,
               trackId,
               sourceRange: range(a.source, a.duration),
+              retimeStartKeyframeId: createId(),
+              retimeEndKeyframeId: createId(),
             };
             break;
           case "move":
@@ -450,6 +847,8 @@ export function compileAiPlan(
               trackId,
               at: time(a.at),
               rightClipId: newRef(a.ref),
+              rightStartKeyframeId: createId(),
+              leftEndKeyframeId: createId(),
             };
             break;
           case "volume":
@@ -461,8 +860,8 @@ export function compileAiPlan(
     }
     const op = operationSchema.parse({
       operationId: createId(),
-      type,
-      arguments: args,
+      type: type!,
+      arguments: args!,
       ...(targetId ? { targetId } : {}),
       preconditions: [],
       provenance: { actorType: "agent", actorId: "studio.gemini-editor" },
@@ -476,5 +875,9 @@ export function compileAiPlan(
       ...(trackId ? { trackId } : {}),
     });
   }
+  if (steps.length > 60)
+    throw Error(
+      "This plan needs more than 60 operations. Split it into smaller editing passes.",
+    );
   return steps;
 }

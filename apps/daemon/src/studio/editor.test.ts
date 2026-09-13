@@ -47,6 +47,31 @@ describe("visual Studio", () => {
     ).toBe(12);
   });
 
+  it("previews ramp segments, holds and reverse using their source maps", () => {
+    const run = editorModel();
+    run(
+      "var clip={timelineRange:range(10,8),sourceRange:range(2,6),timeMap:[{time:time(0),value:60},{time:time(2),value:90},{time:time(4),value:90},{time:time(8),value:240}]};",
+    );
+    expect(run("sourceAt(clip,11)")).toBe(2.5);
+    expect(run("sourceAt(clip,13)")).toBe(3);
+    expect(run("playbackRateAt(clip,13)")).toBe(0);
+    expect(run("playbackRateAt(clip,16)")).toBe(1.25);
+    run("clip.timeMap=[{time:time(0),value:240},{time:time(8),value:60}]");
+    expect(run("sourceAt(clip,14)")).toBe(5);
+    expect(run("playbackRateAt(clip,14)")).toBe(-0.75);
+  });
+
+  it("combines gain, fades and timeline ducking for audible preview", () => {
+    const run = editorModel();
+    run(
+      "var sound={timelineRange:range(10,6),audio:{gainDb:0},effects:[{enabled:true,capabilityId:'frameos.audio.channel-strip',parameters:{fades:[{kind:'in',duration:time(2),curve:'linear'}],timelineDuck:{start:2,end:4,reductionDb:20,attack:.1,release:.5}}}]};",
+    );
+    expect(run("audioLevel(sound,10)")).toBe(0);
+    expect(run("audioLevel(sound,11)")).toBe(0.5);
+    expect(run("audioLevel(sound,13)")).toBeCloseTo(0.1);
+    expect(run("audioLevel(sound,15)")).toBe(1);
+  });
+
   it("uses public typed operations and preserves the requested drop position", () => {
     const run = editorModel();
     const result = run(

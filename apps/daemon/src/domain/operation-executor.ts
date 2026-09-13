@@ -358,7 +358,8 @@ function findAutomationCurve(
 function ensureTrackAcceptsItem(track: Track, item: TimelineItem): void {
   if (
     track.kind === "audio" &&
-    ["title", "generator", "transition"].includes(item.type)
+    (["title", "generator"].includes(item.type) ||
+      (item.type === "transition" && item.capabilityId !== "frameos.transition.audio_crossfade"))
   ) {
     throw new FrameOSError(
       "VALIDATION_ERROR",
@@ -5719,7 +5720,9 @@ export function executeOperations(
   const inverseOperations: Operation[] = [];
 
   for (const operation of operations) {
-    const result = applyOne(project, operation);
+    // Inserted entities must not share references with the approved operation
+    // payload: later operations in the same batch may mutate those entities.
+    const result = applyOne(project, structuredClone(operation));
     changes.push(result.change);
     affectedRanges.push(...result.ranges);
     if (result.inverse !== undefined) {

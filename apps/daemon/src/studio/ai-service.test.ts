@@ -6,7 +6,7 @@ import { assetSchema, createId } from "@frameos/contracts";
 import { createProject } from "../domain/project-factory.js";
 import { createServices, type FrameOSServices } from "../services/services.js";
 import { aiPlanRequestSchema } from "./ai-plan.js";
-import { aiPlanSchema } from "./ai-plan.js";
+import { aiPlanSchema, aiActionSchema } from "./ai-plan.js";
 import { z } from "zod";
 import {
   StudioAiService,
@@ -24,7 +24,9 @@ describe("Vertex edit response handling", () => {
       string,
       { items: { anyOf: unknown[] } }
     >;
-    expect(properties.actions!.items.anyOf).toHaveLength(11);
+    expect(properties.actions!.items.anyOf).toHaveLength(
+      aiActionSchema.options.length,
+    );
   });
   it("keeps action variants, enum discriminators and consistent field order", () => {
     expect(

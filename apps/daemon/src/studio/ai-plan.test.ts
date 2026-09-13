@@ -1,8 +1,11 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { assetSchema, createId, toSeconds } from "@frameos/contracts";
 import { createProject } from "../domain/project-factory.js";
 import { executeOperations } from "../domain/operation-executor.js";
 import { aiPlanSchema, aiPlanRequestSchema, compileAiPlan } from "./ai-plan.js";
+import { compileMltXml } from "../engine/mlt-compiler.js";
 
 function fixture() {
   const project = createProject({ name: "AI plan test" });
@@ -10,7 +13,7 @@ function fixture() {
     id: createId(),
     name: "sample.mp4",
     kind: "video",
-    uri: "file:///sample.mp4",
+    uri: pathToFileURL(resolve("sample.mp4")).href,
     hash: "a".repeat(64),
     duration: { value: 600, rate: { numerator: 30, denominator: 1 } },
   });
@@ -23,6 +26,351 @@ function fixture() {
   });
   return { project, asset, request };
 }
+
+function mediaPlan(extra: unknown[]) {
+  const f = fixture();
+  const plan = aiPlanSchema.parse({
+    summary: "Independent audio edit",
+    clarification: "",
+    warnings: [],
+    actions: [
+      {
+        type: "track",
+        ref: "v",
+        name: "Picture",
+        kind: "video",
+        label: "Picture",
+      },
+      { type: "track", ref: "a", name: "Sound", kind: "audio", label: "Sound" },
+      {
+        type: "add",
+        ref: "shot",
+        track: "v",
+        assetId: f.asset.id,
+        start: 0,
+        source: 2,
+        duration: 6,
+        label: "Add shot",
+      },
+      ...extra,
+    ],
+  });
+  const steps = compileAiPlan(f.project, plan, f.request);
+  const result = executeOperations(
+    f.project,
+    steps.map((s) => s.op),
+  ).project;
+  const seq = result.sequences[result.settings.defaultSequenceId]!;
+  return {
+    ...f,
+    result,
+    steps,
+    seq,
+    video: seq.tracks.find((t) => t.name === "Picture")!,
+    audio: seq.tracks.find((t) => t.name === "Sound")!,
+  };
+}
+describe("AI independent sound and retiming", () => {
+  it("detaches, cuts sound independently, processes it and relinks without doubling the original", () => {
+    const { video, audio, project, steps, result } = mediaPlan([
+      {
+        type: "detach_audio",
+        item: "shot",
+        ref: "sound",
+        track: "a",
+        label: "Detach sound",
+      },
+      {
+        type: "split",
+        item: "sound",
+        ref: "tail",
+        at: 3,
+        label: "Split audio at 3",
+      },
+      { type: "volume", item: "tail", gainDb: -9, label: "Lower tail" },
+      {
+        type: "audio_fade",
+        item: "tail",
+        kind: "out",
+        duration: 1,
+        curve: "linear",
+        label: "Fade out",
+      },
+      {
+        type: "link",
+        item: "shot",
+        other: "sound",
+        linked: true,
+        label: "Relink",
+      },
+    ]);
+    expect(video.items[0]).toMatchObject({
+      audio: { muted: true },
+      links: [audio.items[0]!.id],
+    });
+    expect(audio.items).toHaveLength(2);
+    expect(audio.items.map((i) => toSeconds(i.timelineRange.duration))).toEqual(
+      [3, 3],
+    );
+    expect(toSeconds(video.items[0]!.timelineRange.duration)).toBe(6);
+    expect(audio.items[1]).toMatchObject({
+      audio: { gainDb: -9, muted: false },
+    });
+    expect(
+      project.sequences[project.settings.defaultSequenceId]!.tracks.every(
+        (t) => !t.items.length,
+      ),
+    ).toBe(true);
+    expect(steps.every((s) => s.op.provenance?.actorType === "agent")).toBe(
+      true,
+    );
+    const xml = compileMltXml(result, undefined, {
+      availableCapabilities: new Set([
+        "mlt.filter.avfilter.volume",
+        "mlt.filter.avfilter.afade",
+      ]),
+    });
+    expect(xml).toContain('hide="video"');
+    expect(xml).toContain("-120dB");
+    expect(xml).toContain("avfilter.afade");
+  });
+  it("supports fractional slow motion and splitting retimed clips", () => {
+    const { video } = mediaPlan([
+      { type: "speed", item: "shot", speed: 0.5, label: "Half speed" },
+      {
+        type: "split",
+        item: "shot",
+        ref: "tail",
+        at: 6,
+        label: "Split slow motion",
+      },
+      {
+        type: "volume",
+        item: "tail",
+        gainDb: -6,
+        label: "Quieter slow motion",
+      },
+    ]);
+    expect(video.items.map((i) => toSeconds(i.timelineRange.duration))).toEqual(
+      [6, 6],
+    );
+    expect(
+      video.items.map(
+        (i) => i.type === "clip" && i.timeMap.map((k) => k.value),
+      ),
+    ).toEqual([
+      [60, 150],
+      [150, 240],
+    ]);
+  });
+  it("compiles a native speech processing chain and timeline ducking", () => {
+    const { result, audio } = mediaPlan([
+      {
+        type: "detach_audio",
+        item: "shot",
+        ref: "voice",
+        track: "a",
+        label: "Detach voice",
+      },
+      {
+        type: "audio_enhance_voice",
+        item: "voice",
+        amount: 0.5,
+        label: "Enhance speech",
+      },
+      {
+        type: "audio_normalize",
+        item: "voice",
+        targetLufs: -16,
+        truePeakDb: -1,
+        mode: "integrated",
+        label: "Normalize",
+      },
+      {
+        type: "audio_limit",
+        item: "voice",
+        ceilingDb: -1,
+        releaseMs: 100,
+        lookaheadMs: 5,
+        label: "Limit",
+      },
+      {
+        type: "mute",
+        item: "shot",
+        muted: false,
+        label: "Use picture sound as a test bed",
+      },
+      {
+        type: "audio_duck",
+        item: "shot",
+        sidechain: "voice",
+        reductionDb: 12,
+        attack: 0.1,
+        release: 0.4,
+        label: "Duck bed",
+      },
+    ]);
+    expect(audio.items[0]).toMatchObject({
+      effects: [
+        {
+          parameters: {
+            denoise: { amount: 0.25 },
+            normalization: { targetLufs: -16 },
+          },
+        },
+      ],
+    });
+    const xml = compileMltXml(result, undefined, {
+      availableCapabilities: new Set([
+        "mlt.filter.avfilter.volume",
+        "mlt.filter.avfilter.afftdn",
+        "mlt.filter.avfilter.highpass",
+        "mlt.filter.avfilter.equalizer",
+        "mlt.filter.avfilter.acompressor",
+        "mlt.filter.avfilter.alimiter",
+        "mlt.filter.avfilter.loudnorm",
+      ]),
+    });
+    expect(xml).toContain("pow(10,(-12*");
+    expect(xml).toContain("avfilter.loudnorm");
+  });
+  it("compiles ramps with holds and rejects descending ramp points", () => {
+    const ramp = {
+      type: "speed_ramp",
+      item: "shot",
+      duration: 8,
+      label: "Ramp",
+      points: [
+        { at: 0, source: 2 },
+        { at: 2, source: 3 },
+        { at: 4, source: 3 },
+        { at: 8, source: 8 },
+      ],
+    };
+    const { video } = mediaPlan([ramp]);
+    expect(toSeconds(video.items[0]!.timelineRange.duration)).toBe(8);
+    expect(video.items[0]).toMatchObject({
+      timeMap: [{ value: 60 }, { value: 90 }, { value: 90 }, { value: 240 }],
+    });
+    expect(() =>
+      mediaPlan([
+        {
+          ...ramp,
+          points: [
+            { at: 0, source: 8 },
+            { at: 8, source: 2 },
+          ],
+        },
+      ]),
+    ).toThrow("non-descending");
+  });
+  it("rejects double detachment, out-of-range fades and self-ducking", () => {
+    const detach = {
+      type: "detach_audio",
+      item: "shot",
+      ref: "sound",
+      track: "a",
+      label: "Detach",
+    };
+    expect(() => mediaPlan([detach, { ...detach, ref: "again" }])).toThrow(
+      "already detached",
+    );
+    expect(() =>
+      mediaPlan([
+        {
+          type: "audio_fade",
+          item: "shot",
+          kind: "in",
+          duration: 7,
+          curve: "linear",
+          label: "Too long",
+        },
+      ]),
+    ).toThrow("fit");
+    expect(() =>
+      mediaPlan([
+        {
+          type: "audio_duck",
+          item: "shot",
+          sidechain: "shot",
+          reductionDb: 6,
+          attack: 0.1,
+          release: 0.2,
+          label: "Invalid",
+        },
+      ]),
+    ).toThrow("different audible");
+  });
+  it("undoes detachment in one operation and preserves processing with unique IDs", () => {
+    const { project, steps } = mediaPlan([
+      {
+        type: "audio_fade",
+        item: "shot",
+        kind: "in",
+        duration: 1,
+        curve: "linear",
+        label: "Fade",
+      },
+      {
+        type: "detach_audio",
+        item: "shot",
+        ref: "sound",
+        track: "a",
+        label: "Detach",
+      },
+    ]);
+    const before = executeOperations(
+      project,
+      steps.slice(0, -1).map((s) => s.op),
+    ).project;
+    expect(steps.at(-1)!.op.type).toBe("sequence.replace");
+    const change = executeOperations(before, [steps.at(-1)!.op]);
+    expect(
+      executeOperations(change.project, change.inverseOperations).project,
+    ).toEqual(before);
+  });
+  it("changes speed after a retimed split without bringing back removed source sections", () => {
+    const { video } = mediaPlan([
+      { type: "speed", item: "shot", speed: 0.5, label: "Slow" },
+      { type: "split", item: "shot", ref: "tail", at: 6, label: "Split" },
+      { type: "speed", item: "tail", speed: 1, label: "Restore tail speed" },
+    ]);
+    expect(toSeconds(video.items[1]!.timelineRange.duration)).toBe(3);
+    expect(video.items[1]).toMatchObject({
+      sourceRange: { start: { value: 150 }, duration: { value: 90 } },
+    });
+  });
+  it("adds an audio crossfade with source handles", () => {
+    const { audio, result } = mediaPlan([
+      {
+        type: "detach_audio",
+        item: "shot",
+        ref: "sound",
+        track: "a",
+        label: "Detach",
+      },
+      { type: "split", item: "sound", ref: "tail", at: 3, label: "Split" },
+      {
+        type: "transition",
+        from: "sound",
+        to: "tail",
+        kind: "audio_crossfade",
+        duration: 1,
+        label: "Crossfade",
+      },
+    ]);
+    expect(audio.items[2]).toMatchObject({
+      capabilityId: "frameos.transition.audio_crossfade",
+    });
+    const xml = compileMltXml(result, undefined, {
+      availableCapabilities: new Set([
+        "mlt.filter.avfilter.volume",
+        "mlt.transition.mix",
+      ]),
+    });
+    expect(xml).toContain('name="mlt_service">mix');
+  });
+});
 describe("AI edit compiler", () => {
   it("compiles aliases, explicit source ranges, rotation, titles and splits without mutating the project", () => {
     const { project, asset, request } = fixture();
