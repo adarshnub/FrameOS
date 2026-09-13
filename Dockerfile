@@ -20,6 +20,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/package.json /app/package-lock.json ./
+COPY --from=build /app/apps/daemon/assets ./apps/daemon/assets
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/daemon/package.json ./apps/daemon/package.json
 COPY --from=build /app/apps/daemon/dist ./apps/daemon/dist

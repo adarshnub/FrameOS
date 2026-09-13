@@ -99,25 +99,45 @@ const studioSessionTtlMs = 7 * 24 * 60 * 60 * 1_000;
 
 function studioSession(password: string, issuedAt: number): string {
   const payload = issuedAt.toString(36);
-  const signature = createHmac("sha256", password).update(payload).digest("base64url");
+  const signature = createHmac("sha256", password)
+    .update(payload)
+    .digest("base64url");
   return `${payload}.${signature}`;
 }
 
-function studioSessionMatches(cookie: string | undefined, password: string | undefined): boolean {
+function studioSessionMatches(
+  cookie: string | undefined,
+  password: string | undefined,
+): boolean {
   if (!cookie || !password) return false;
   const [payload, supplied] = cookie.split(".");
   if (!payload || !supplied) return false;
   const issuedAt = Number.parseInt(payload, 36);
-  if (!Number.isFinite(issuedAt) || Date.now() - issuedAt > studioSessionTtlMs || issuedAt > Date.now() + 60_000) return false;
-  const expected = createHmac("sha256", password).update(payload).digest("base64url");
-  const a = Buffer.from(supplied); const b = Buffer.from(expected);
+  if (
+    !Number.isFinite(issuedAt) ||
+    Date.now() - issuedAt > studioSessionTtlMs ||
+    issuedAt > Date.now() + 60_000
+  )
+    return false;
+  const expected = createHmac("sha256", password)
+    .update(payload)
+    .digest("base64url");
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function cookieValue(request: { headers: Record<string, string | string[] | undefined> }, name: string): string | undefined {
+function cookieValue(
+  request: { headers: Record<string, string | string[] | undefined> },
+  name: string,
+): string | undefined {
   const raw = request.headers.cookie;
   if (typeof raw !== "string") return undefined;
-  return raw.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
+  return raw
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
 }
 
 function requestAuthorization(request: {
@@ -251,20 +271,37 @@ export async function buildHttpServer(
 
   app.addHook("onRequest", async (request, reply) => {
     requestStartedAt.set(request, process.hrtime.bigint());
-    if (request.url.startsWith("/studio") && !request.url.startsWith("/studio/app.")) {
-      if (services.config.studioPassword && !studioSessionMatches(cookieValue(request, studioCookieName), services.config.studioPassword)) {
+    if (
+      request.url.startsWith("/studio") &&
+      !request.url.startsWith("/studio/app.")
+    ) {
+      if (
+        services.config.studioPassword &&
+        !studioSessionMatches(
+          cookieValue(request, studioCookieName),
+          services.config.studioPassword,
+        )
+      ) {
         return reply.redirect(`/login?next=${encodeURIComponent(request.url)}`);
       }
     }
     if (!isProtectedPath(request.url)) return;
     const header = requestAuthorization(request);
-    const grant = services.config.studioPassword && studioSessionMatches(cookieValue(request, studioCookieName), services.config.studioPassword)
-      ? { id: "studio-session", scope: requiredScope(request.url, request.method) }
-      : authorize(
-      header,
-      services.config,
-      requiredScope(request.url, request.method),
-    );
+    const grant =
+      services.config.studioPassword &&
+      studioSessionMatches(
+        cookieValue(request, studioCookieName),
+        services.config.studioPassword,
+      )
+        ? {
+            id: "studio-session",
+            scope: requiredScope(request.url, request.method),
+          }
+        : authorize(
+            header,
+            services.config,
+            requiredScope(request.url, request.method),
+          );
     if (services.config.remoteMode) {
       request.log.info(
         { tokenId: grant.id, scope: grant.scope },
@@ -335,10 +372,18 @@ export async function buildHttpServer(
     void reply
       .header(
         "content-security-policy",
-        "default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
       )
       .type("text/html; charset=utf-8");
     return landingHtml;
+  });
+  app.get("/site/editor.png", async (_request, reply) => {
+    return reply
+      .type("image/png")
+      .header("cache-control", "public, max-age=3600")
+      .send(
+        await readFile(new URL("../../assets/editor-showcase.png", import.meta.url)),
+      );
   });
   app.get("/site/app.css", async (_request, reply) => {
     void reply.type("text/css; charset=utf-8");
@@ -355,10 +400,26 @@ export async function buildHttpServer(
   });
   app.post("/login", async (request, reply) => {
     const password = services.config.studioPassword;
-    const supplied = typeof request.body === "object" && request.body !== null && "password" in request.body ? (request.body as { password?: unknown }).password : undefined;
-    if (!password || typeof supplied !== "string" || supplied.length === 0 || !tokenMatches(`Bearer ${supplied}`, password)) return reply.code(401).send({ error: "Invalid password" });
+    const supplied =
+      typeof request.body === "object" &&
+      request.body !== null &&
+      "password" in request.body
+        ? (request.body as { password?: unknown }).password
+        : undefined;
+    if (
+      !password ||
+      typeof supplied !== "string" ||
+      supplied.length === 0 ||
+      !tokenMatches(`Bearer ${supplied}`, password)
+    )
+      return reply.code(401).send({ error: "Invalid password" });
     const value = studioSession(password, Date.now());
-    return reply.header("set-cookie", `${studioCookieName}=${value}; Path=/; Max-Age=${Math.floor(studioSessionTtlMs / 1000)}; HttpOnly; Secure; SameSite=Lax`).send({ ok: true });
+    return reply
+      .header(
+        "set-cookie",
+        `${studioCookieName}=${value}; Path=/; Max-Age=${Math.floor(studioSessionTtlMs / 1000)}; HttpOnly; Secure; SameSite=Lax`,
+      )
+      .send({ ok: true });
   });
 
   app.get("/studio", async (_request, reply) => {

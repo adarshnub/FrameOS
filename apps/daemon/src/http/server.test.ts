@@ -118,8 +118,14 @@ describe("HTTP control plane", () => {
   it("serves the browser feature lab from the inspector route", async () => {
     const landing = await app.inject({ method: "GET", url: "/" });
     expect(landing.statusCode).toBe(200);
-    expect(landing.body).toContain("The timeline");
-    expect(landing.body).toContain("early-access-form");
+    expect(landing.body).toContain("You bring the footage.");
+    expect(landing.body).toContain("demo-toggle");
+    const capture = await app.inject({
+      method: "GET",
+      url: "/site/editor.png",
+    });
+    expect(capture.statusCode).toBe(200);
+    expect(capture.headers["content-type"]).toContain("image/png");
 
     const page = await app.inject({ method: "GET", url: "/inspector" });
     expect(page.statusCode).toBe(200);
