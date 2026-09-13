@@ -17,7 +17,7 @@ steps:
     args:
       - -ceu
       - |
-        gcloud compute ssh ${_VM_NAME} \
+        gcloud compute ssh ${_SSH_USER}@${_VM_NAME} \
           --zone=${_VM_ZONE} \
           --project=${PROJECT_ID} \
           --tunnel-through-iap \
@@ -35,6 +35,9 @@ substitutions:
   _IMAGE: asia-south1-docker.pkg.dev/gen-lang-client-0644821693/frameos/frameos-daemon
   _VM_NAME: frameos-studio
   _VM_ZONE: asia-south1-a
+  # Cloud Build containers run as root by default. The VM's root SSH login is
+  # disabled; use the provisioned OS Login administrator instead.
+  _SSH_USER: adars
 timeout: 1800s
 options:
   logging: CLOUD_LOGGING_ONLY
