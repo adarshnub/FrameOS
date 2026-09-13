@@ -380,12 +380,14 @@ int probe(const std::filesystem::path& media_path) {
         return 2;
     }
 #ifdef FRAMEOS_WITH_MLT
+    // Keep the MLT factory alive until its stack-owned producer/profile objects
+    // have been destroyed. Closing it here causes a shutdown-time crash after
+    // an otherwise successful probe, which makes uploads appear to fail.
     Mlt::Factory::init();
     Mlt::Profile profile;
     Mlt::Producer producer(profile, "avformat", media_path.string().c_str());
     if (!producer.is_valid()) {
         std::cerr << "MLT/FFmpeg could not probe the media file" << std::endl;
-        Mlt::Factory::close();
         return 3;
     }
 
@@ -474,7 +476,6 @@ int probe(const std::filesystem::path& media_path) {
     output << ",\"metadata\":{\"provider\":\"mlt-avformat\",\"workerVersion\":\""
            << worker_version << "\"}}";
     std::cout << output.str() << std::endl;
-    Mlt::Factory::close();
     return first ? 3 : 0;
 #else
     static_cast<void>(media_path);
