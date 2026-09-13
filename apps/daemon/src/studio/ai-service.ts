@@ -72,48 +72,47 @@ export function vertexEditGenerator(
       config.location === "global"
         ? "aiplatform.googleapis.com"
         : config.location + "-aiplatform.googleapis.com";
-    const requestUrl =
-      `https://${endpoint}/v1/projects/${encodeURIComponent(config.projectId)}/locations/${encodeURIComponent(config.location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent`;
+    const requestUrl = `https://${endpoint}/v1/projects/${encodeURIComponent(config.projectId)}/locations/${encodeURIComponent(config.location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent`;
     const requestInit: RequestInit = {
-        method: "POST",
-        signal,
-        redirect: "error",
-        headers: {
-          authorization: `Bearer ${await tokens.get(signal)}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
+      method: "POST",
+      signal,
+      redirect: "error",
+      headers: {
+        authorization: `Bearer ${await tokens.get(signal)}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text:
+                  prompt +
+                  "\nExact action variants (include ONLY fields for the chosen variant):\n" +
+                  JSON.stringify(responseSchema),
+              },
+              ...frames.flatMap((frame) => [
                 {
-                  text:
-                    prompt +
-                    "\nExact action variants (include ONLY fields for the chosen variant):\n" +
-                    JSON.stringify(responseSchema),
+                  text: `${frame.role.toUpperCase()} browser preview at ${frame.at.toFixed(3)} seconds`,
                 },
-                ...frames.flatMap((frame) => [
-                  {
-                    text: `${frame.role.toUpperCase()} browser preview at ${frame.at.toFixed(3)} seconds`,
-                  },
-                  { inlineData: { mimeType: "image/jpeg", data: frame.jpeg } },
-                ]),
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 8192,
-            ...(model.startsWith("gemini-2.5-")
-              ? { thinkingConfig: { thinkingBudget: 1024 } }
-              : {}),
-            responseMimeType: "application/json",
-            // This action union exceeds the deployed provider's constrained
-            // schema support. Validate the JSON locally before any approval.
+                { inlineData: { mimeType: "image/jpeg", data: frame.jpeg } },
+              ]),
+            ],
           },
-        }),
-      };
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 8192,
+          ...(model.startsWith("gemini-2.5-")
+            ? { thinkingConfig: { thinkingBudget: 1024 } }
+            : {}),
+          responseMimeType: "application/json",
+          // This action union exceeds the deployed provider's constrained
+          // schema support. Validate the JSON locally before any approval.
+        },
+      }),
+    };
     let response = await fetch(requestUrl, requestInit);
     // Vertex may return a transient 429 while the analysis requests that
     // precede planning are still settling. Honor Retry-After once so a user
@@ -184,6 +183,7 @@ Times are seconds on the sequence; add.source and trim.source are seconds in ori
 For a NEW montage create a new video track and add selected media consecutively in requested order. Preserve original tracks; disable original nonempty tracks with track_enabled when replacing the visible assembly, and explicitly mention this in summary/warnings. Do NOT delete existing clips to make a montage.
 For modifying an existing/selected clip, edit it in place; do not create an unrelated montage. Respect locked tracks/items. Never add overlapping items to the same track.
 Use indexed analysis to choose requested highlights, not invented scene timestamps. If there is no analysis, explain that in warnings and use explicit user ranges or request clarification for content-based decisions.
+Use canvas to set output dimensions, including 1080x1920 portrait. Use reframe for precise static positionX/Y, independent scaleX/Y, rotation, opacity and normalized cropTop/Right/Bottom/Left. Use transform_animation for camera movement, punch-ins, shake, fades, or any transform that changes during a shot; keyframe times are seconds from the start of the item and parameters are transform.positionX, transform.positionY, transform.anchorX, transform.anchorY, transform.scaleX, transform.scaleY, transform.rotation, transform.opacity, and the four normalized crop fields. Preserve unspecified transform values. Match the reference shot-by-shot using its individual durations, never a uniform average. Report missing effects explicitly.
 Honor requested durations, source in-points, title wording, volume, rotation, scale and ordering. Preserve picture values not requested to change.
 Titles must use a separate video track above footage. Browser supports basic text, not full typography.
 Independent sound editing: create an audio track, detach_audio(item, ref, track), then trim/split/move/process the detached alias. Detach preserves timing, source range and audio processing and mutes the video to avoid doubled sound. Never use clip extraction as audio extraction. Video and audio can then be edited independently. link(item, other, linked:true) reattaches them as a linked pair while preserving each edit and offset; it does not bake media, restore discarded sound, align timing, or unmute the video. Use linked:false to unlink. Use explicit move actions for BOTH members when moving a linked pair; linking is a relationship, not implicit group editing. Splitting creates a right-side alias; inspect links afterwards. Never unmute the original when the detached audio is still audible unless doubling is requested.
@@ -281,7 +281,11 @@ export class StudioAiService {
         // Use only persisted analysis produced in reference mode, never client-supplied descriptions.
         for (const artifactId of [...reference.analysisRefs].reverse()) {
           const artifact = project.analyses[artifactId];
-          if (artifact?.analyzerId !== "google.vertex.gemini.video") continue;
+          if (
+            artifact?.analyzerId !== "google.vertex.gemini.video" ||
+            artifact.analyzerVersion !== "1.2.0"
+          )
+            continue;
           const document = await this.services.projects.readAnalysisDocument(
             project.projectId,
             artifactId,
@@ -295,13 +299,26 @@ export class StudioAiService {
           // without a precise time range (for example when native probing is
           // unavailable). It is still valid reference guidance, so retain
           // those segments and let the planner treat the range as optional.
-          referenceAnalysis = document.segments
-            .slice(0, 120)
-            .map((s) => ({
-              range: s.range,
-              text: s.text?.slice(0, 800),
-              confidence: s.confidence,
-            }));
+          referenceAnalysis = document.segments.slice(0, 120).map((s) => ({
+            range: s.range,
+            text: s.text?.slice(0, 4000),
+            confidence: s.confidence,
+            style: Object.fromEntries(
+              Object.entries(s.metadata).filter(([key]) =>
+                [
+                  "role",
+                  "framing",
+                  "transition",
+                  "transitionDurationSeconds",
+                  "motionKind",
+                  "motionEnergy",
+                  "subjectPosition",
+                  "beatBpm",
+                  "audioMood",
+                ].includes(key),
+              ),
+            ),
+          }));
           break;
         }
         if (!referenceAnalysis.length)

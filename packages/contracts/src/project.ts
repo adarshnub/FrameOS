@@ -40,6 +40,37 @@ export const automationCurveSchema = z
   })
   .strict();
 
+/** Parameters that can be animated directly on a visual timeline item. */
+export const itemAutomationParameterSchema = z.enum([
+  "transform.positionX",
+  "transform.positionY",
+  "transform.anchorX",
+  "transform.anchorY",
+  "transform.scaleX",
+  "transform.scaleY",
+  "transform.rotation",
+  "transform.opacity",
+  "transform.cropTop",
+  "transform.cropRight",
+  "transform.cropBottom",
+  "transform.cropLeft",
+]);
+
+export const itemAutomationCurveSchema = z
+  .object({
+    id: entityIdSchema,
+    parameter: itemAutomationParameterSchema,
+    keyframes: z
+      .array(
+        keyframeSchema.extend({
+          value: z.number().finite(),
+        }),
+      )
+      .min(1)
+      .max(100_000),
+  })
+  .strict();
+
 export const effectInstanceSchema = z
   .object({
     id: entityIdSchema,
@@ -160,6 +191,7 @@ export const clipSchema = z
     assetId: entityIdSchema,
     sourceRange: timeRangeSchema,
     transform: transformSchema.prefault({}),
+    automationCurves: z.array(itemAutomationCurveSchema).optional(),
     timeMap: z.array(keyframeSchema).default([]),
     effects: z.array(effectInstanceSchema).default([]),
     audio: audioPropertiesSchema.prefault({}),
@@ -194,6 +226,7 @@ export const nestedSequenceSchema = z
     sequenceId: entityIdSchema,
     sourceRange: timeRangeSchema.optional(),
     transform: transformSchema.prefault({}),
+    automationCurves: z.array(itemAutomationCurveSchema).optional(),
     effects: z.array(effectInstanceSchema).default([]),
     audio: audioPropertiesSchema.prefault({}),
   })
@@ -207,6 +240,7 @@ export const titleSchema = z
     templateId: z.string().max(256).optional(),
     style: metadataSchema.default({}),
     transform: transformSchema.prefault({}),
+    automationCurves: z.array(itemAutomationCurveSchema).optional(),
     effects: z.array(effectInstanceSchema).default([]),
   })
   .strict();

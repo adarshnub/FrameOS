@@ -1,10 +1,13 @@
 import { z } from "zod";
 import {
   createId,
+  frameTime,
   fromSeconds,
   toSeconds,
   operationSchema,
   clipSchema,
+  itemAutomationParameterSchema,
+  transformSchema,
   FrameOSError,
   type Project,
   type Operation,
@@ -17,6 +20,65 @@ const seconds = z.number().finite().min(0).max(86400);
 const base = { label: z.string().min(1).max(300) };
 export const aiActionSchema = z.discriminatedUnion("type", [
   ...mediaActionSchemas,
+  z
+    .object({
+      ...base,
+      type: z.literal("canvas"),
+      width: z.int().min(16).max(8192),
+      height: z.int().min(16).max(8192),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal("reframe"),
+      item: ref,
+      values: transformSchema.partial(),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal("transform_animation"),
+      item: ref,
+      curves: z
+        .array(
+          z
+            .object({
+              parameter: itemAutomationParameterSchema,
+              keyframes: z
+                .array(
+                  z
+                    .object({
+                      time: seconds,
+                      value: z.number().finite(),
+                      interpolation: z
+                        .enum(["hold", "linear", "bezier", "smooth"])
+                        .default("linear"),
+                    })
+                    .strict(),
+                )
+                .min(1)
+                .max(256),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(16),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal("camera_shake"),
+      item: ref,
+      amplitudePixels: z.number().finite().min(0).max(500),
+      rotationDegrees: z.number().finite().min(0).max(20).default(1.5),
+      frequencyHz: z.number().finite().min(0.5).max(12).default(4),
+      overscan: z.number().finite().min(1).max(3).default(1.06),
+      seed: z.int().min(0).max(2_147_483_647).default(1),
+    })
+    .strict(),
   z
     .object({
       ...base,
@@ -257,6 +319,15 @@ export function compileAiPlan(
       assetId: string | undefined,
       trackId: string | undefined;
     const sequenceId = seq().id;
+    if (a.type === "canvas") {
+      emit(
+        a.label,
+        "sequence.format.set",
+        { format: { ...seq().format, width: a.width, height: a.height } },
+        sequenceId,
+      );
+      continue;
+    }
     if (
       mediaActionSchemas.some((schema) => schema.shape.type.value === a.type)
     ) {
@@ -801,7 +872,7 @@ export function compileAiPlan(
       if (a.type === "delete") {
         type = "item.delete";
         args = { sequenceId, trackId };
-      } else if (a.type === "picture") {
+      } else if (a.type === "picture" || a.type === "reframe") {
         if (item.type !== "clip" && item.type !== "title")
           throw Error("AI picture edits require a visual item.");
         type = "item.transform.set";
@@ -810,11 +881,111 @@ export function compileAiPlan(
           trackId,
           transform: {
             ...item.transform,
-            rotation: a.rotation,
-            scaleX: a.scale,
-            scaleY: a.scale,
-            opacity: a.opacity,
+            ...(a.type === "reframe"
+              ? a.values
+              : {
+                  rotation: a.rotation,
+                  scaleX: a.scale,
+                  scaleY: a.scale,
+                  opacity: a.opacity,
+                }),
           },
+        };
+      } else if (a.type === "camera_shake") {
+        if (item.type !== "clip")
+          throw Error("AI camera shake requires a video clip.");
+        const durationFrames = Math.max(
+          1,
+          Math.round(
+            (toSeconds(item.timelineRange.duration) *
+              seq().format.frameRate.numerator) /
+              seq().format.frameRate.denominator,
+          ),
+        );
+        const frameStep = Math.max(
+          1,
+          Math.round(
+            seq().format.frameRate.numerator /
+              seq().format.frameRate.denominator /
+              (a.frequencyHz * 2),
+          ),
+        );
+        const random = (frame: number, channel: number) => {
+          const value =
+            Math.sin(
+              (a.seed + 1) * 12.9898 + frame * 78.233 + channel * 37.719,
+            ) * 43758.5453;
+          return (value - Math.floor(value)) * 2 - 1;
+        };
+        const frames = Array.from(
+          { length: Math.floor(durationFrames / frameStep) + 1 },
+          (_, index) => Math.min(durationFrames, index * frameStep),
+        );
+        if (frames.at(-1) !== durationFrames) frames.push(durationFrames);
+        const keyframes = (
+          parameter: string,
+          value: (frame: number) => number,
+        ) => ({
+          id: createId(),
+          parameter,
+          keyframes: frames.map((frame) => ({
+            id: createId(),
+            time: frameTime(frame, seq().format.frameRate),
+            value: value(frame),
+            interpolation: "smooth" as const,
+          })),
+        });
+        type = "item.automation.set";
+        args = {
+          sequenceId,
+          trackId,
+          automationCurves: [
+            keyframes(
+              "transform.positionX",
+              (frame) =>
+                item.transform.positionX + random(frame, 0) * a.amplitudePixels,
+            ),
+            keyframes(
+              "transform.positionY",
+              (frame) =>
+                item.transform.positionY + random(frame, 1) * a.amplitudePixels,
+            ),
+            keyframes(
+              "transform.rotation",
+              (frame) =>
+                item.transform.rotation + random(frame, 2) * a.rotationDegrees,
+            ),
+            keyframes(
+              "transform.scaleX",
+              () => item.transform.scaleX * a.overscan,
+            ),
+            keyframes(
+              "transform.scaleY",
+              () => item.transform.scaleY * a.overscan,
+            ),
+          ],
+        };
+      } else if (a.type === "transform_animation") {
+        if (
+          item.type !== "clip" &&
+          item.type !== "title" &&
+          item.type !== "nested_sequence"
+        )
+          throw Error("AI transform animation edits require a visual item.");
+        type = "item.automation.set";
+        args = {
+          sequenceId,
+          trackId,
+          automationCurves: a.curves.map((curve) => ({
+            id: createId(),
+            parameter: curve.parameter,
+            keyframes: curve.keyframes.map((keyframe) => ({
+              id: createId(),
+              time: fromSeconds(keyframe.time, seq().format.frameRate).time,
+              value: keyframe.value,
+              interpolation: keyframe.interpolation,
+            })),
+          })),
         };
       } else {
         if (item.type !== "clip") throw Error("AI action requires a clip.");

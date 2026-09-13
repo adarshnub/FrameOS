@@ -359,7 +359,8 @@ function ensureTrackAcceptsItem(track: Track, item: TimelineItem): void {
   if (
     track.kind === "audio" &&
     (["title", "generator"].includes(item.type) ||
-      (item.type === "transition" && item.capabilityId !== "frameos.transition.audio_crossfade"))
+      (item.type === "transition" &&
+        item.capabilityId !== "frameos.transition.audio_crossfade"))
   ) {
     throw new FrameOSError(
       "VALIDATION_ERROR",
@@ -3336,6 +3337,52 @@ function applyOne(
           ...cloneOperation(operation),
           operationId: createId(),
           arguments: { ...operation.arguments, transform: previous },
+        },
+      };
+    }
+    case "item.automation.set": {
+      const located = requireItem(
+        project,
+        operation.arguments.sequenceId,
+        operation.arguments.trackId,
+        operation.targetId,
+      );
+      if (
+        located.item.type !== "clip" &&
+        located.item.type !== "title" &&
+        located.item.type !== "nested_sequence"
+      ) {
+        throw new FrameOSError(
+          "VALIDATION_ERROR",
+          `Item ${located.item.id} cannot animate transforms`,
+          422,
+        );
+      }
+      const previous = structuredClone(located.item.automationCurves ?? []);
+      located.item.automationCurves = structuredClone(
+        operation.arguments.automationCurves,
+      ) as NonNullable<typeof located.item.automationCurves>;
+      return {
+        change: makeChange(
+          operation,
+          [
+            located.item.id,
+            ...located.item.automationCurves.flatMap((curve) => [
+              curve.id,
+              ...curve.keyframes.map((keyframe) => keyframe.id),
+            ]),
+          ],
+          `Set transform animation for ${located.item.name}`,
+        ),
+        ranges: [located.item.timelineRange],
+        inverse: {
+          ...cloneOperation(operation),
+          operationId: createId(),
+          arguments: {
+            ...operation.arguments,
+            automationCurves:
+              previous as typeof operation.arguments.automationCurves,
+          },
         },
       };
     }

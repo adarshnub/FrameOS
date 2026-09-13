@@ -68,6 +68,74 @@ function formatNumber(value: number): string {
   return String(rounded);
 }
 
+function animationFrame(
+  time: { value: number; rate: { numerator: number; denominator: number } },
+  sequence: Sequence,
+): number {
+  return rescaleTime(time, sequence.format.frameRate).time.value;
+}
+
+function animatedNumberAtFrame(
+  clip: Clip,
+  parameter: string,
+  frame: number,
+  sequence: Sequence,
+  fallback: number,
+): number {
+  const curve = (clip.automationCurves ?? []).find(
+    (candidate) => candidate.parameter === parameter,
+  );
+  if (curve === undefined || curve.keyframes.length === 0) return fallback;
+  const keyframes = [...curve.keyframes].sort(
+    (left, right) =>
+      animationFrame(left.time, sequence) -
+      animationFrame(right.time, sequence),
+  );
+  const first = keyframes[0];
+  if (first === undefined || typeof first.value !== "number") return fallback;
+  const firstFrame = animationFrame(first.time, sequence);
+  if (frame <= firstFrame) return first.value;
+  for (let index = 1; index < keyframes.length; index += 1) {
+    const previous = keyframes[index - 1];
+    const current = keyframes[index];
+    if (previous === undefined || current === undefined) continue;
+    const previousFrame = animationFrame(previous.time, sequence);
+    const currentFrame = animationFrame(current.time, sequence);
+    if (frame > currentFrame) continue;
+    if (
+      current.interpolation === "hold" ||
+      typeof previous.value !== "number" ||
+      currentFrame === previousFrame
+    ) {
+      return previous.value as number;
+    }
+    const progress = (frame - previousFrame) / (currentFrame - previousFrame);
+    return (
+      (previous.value as number) +
+      ((current.value as number) - (previous.value as number)) * progress
+    );
+  }
+  const last = keyframes.at(-1);
+  return last !== undefined && typeof last.value === "number"
+    ? last.value
+    : fallback;
+}
+
+function animatedTransformProperty(
+  clip: Clip,
+  sequence: Sequence,
+  parameter: string,
+  fallback: number,
+  frames: readonly number[],
+): string {
+  return frames
+    .map(
+      (frame) =>
+        `${frame}=${formatNumber(animatedNumberAtFrame(clip, parameter, frame, sequence, fallback))}`,
+    )
+    .join(";");
+}
+
 function itemStartFrames(item: TimelineItem, rate: RationalRate): number {
   return rescaleTime(item.timelineRange.start, rate).time.value;
 }
@@ -401,6 +469,14 @@ function compileTitleProducer(
   title: Title,
   options: MltCompilerOptions,
 ): string {
+  if ((title.automationCurves ?? []).length > 0) {
+    capabilityUnavailable(
+      "Animated title transforms are not mapped by the MLT adapter",
+      "title.automationCurves",
+      title.automationCurves,
+      ["use an animated video clip for transform overlays"],
+    );
+  }
   const transform = title.transform;
   if (
     transform.positionX !== 0 ||
@@ -1733,6 +1809,42 @@ function compileClipFilters(
   assertNormalizedClipSupport(clip);
   const lines: string[] = compileClipEffects(clip, sequence, options);
   const transform = clip.transform;
+  const automationCurves = clip.automationCurves ?? [];
+  const animatedCrop = automationCurves.find((curve) =>
+    curve.parameter.startsWith("transform.crop"),
+  );
+  if (animatedCrop !== undefined) {
+    capabilityUnavailable(
+      "Animated clip cropping has no audited MLT mapping yet",
+      `automationCurves.${animatedCrop.id}`,
+      animatedCrop.parameter,
+      ["animate scale and position instead"],
+    );
+  }
+  const animatedAffineCurves = automationCurves.filter((curve) =>
+    [
+      "transform.positionX",
+      "transform.positionY",
+      "transform.anchorX",
+      "transform.anchorY",
+      "transform.scaleX",
+      "transform.scaleY",
+      "transform.rotation",
+      "transform.opacity",
+    ].includes(curve.parameter),
+  );
+  const animatedFrames = [
+    0,
+    itemDurationFrames(clip, sequence.format.frameRate),
+    ...animatedAffineCurves.flatMap((curve) =>
+      curve.keyframes.map((keyframe) =>
+        animationFrame(keyframe.time, sequence),
+      ),
+    ),
+  ]
+    .filter((frame) => Number.isInteger(frame) && frame >= 0)
+    .toSorted((left, right) => left - right)
+    .filter((frame, index, all) => index === 0 || frame !== all[index - 1]);
   const hasCrop =
     transform.cropTop !== 0 ||
     transform.cropRight !== 0 ||
@@ -1775,24 +1887,90 @@ function compileClipFilters(
     transform.scaleY !== 1 ||
     transform.rotation !== 0 ||
     transform.opacity !== 1;
-  if (hasAffine) {
+  if (hasAffine || animatedAffineCurves.length > 0) {
     requireCapability(options, capabilityIds.affine, "Clip transformation");
-    const widthPercent = transform.scaleX * 100;
-    const heightPercent = transform.scaleY * 100;
-    const xPercent =
-      50 +
-      (transform.positionX / sequence.format.width) * 100 -
-      widthPercent * transform.anchorX;
-    const yPercent =
-      50 +
-      (transform.positionY / sequence.format.height) * 100 -
-      heightPercent * transform.anchorY;
-    const rectangle = `${formatNumber(xPercent)}%/${formatNumber(yPercent)}%:${formatNumber(widthPercent)}%x${formatNumber(heightPercent)}%:${formatNumber(transform.opacity * 100)}%`;
+    const rectangleAtFrame = (frame: number): string => {
+      const scaleX = animatedNumberAtFrame(
+        clip,
+        "transform.scaleX",
+        frame,
+        sequence,
+        transform.scaleX,
+      );
+      const scaleY = animatedNumberAtFrame(
+        clip,
+        "transform.scaleY",
+        frame,
+        sequence,
+        transform.scaleY,
+      );
+      const anchorX = animatedNumberAtFrame(
+        clip,
+        "transform.anchorX",
+        frame,
+        sequence,
+        transform.anchorX,
+      );
+      const anchorY = animatedNumberAtFrame(
+        clip,
+        "transform.anchorY",
+        frame,
+        sequence,
+        transform.anchorY,
+      );
+      const positionX = animatedNumberAtFrame(
+        clip,
+        "transform.positionX",
+        frame,
+        sequence,
+        transform.positionX,
+      );
+      const positionY = animatedNumberAtFrame(
+        clip,
+        "transform.positionY",
+        frame,
+        sequence,
+        transform.positionY,
+      );
+      const opacity = animatedNumberAtFrame(
+        clip,
+        "transform.opacity",
+        frame,
+        sequence,
+        transform.opacity,
+      );
+      const widthPercent = scaleX * 100;
+      const heightPercent = scaleY * 100;
+      const xPercent =
+        50 + (positionX / sequence.format.width) * 100 - widthPercent * anchorX;
+      const yPercent =
+        50 +
+        (positionY / sequence.format.height) * 100 -
+        heightPercent * anchorY;
+      return `${formatNumber(xPercent)}%/${formatNumber(yPercent)}%:${formatNumber(widthPercent)}%x${formatNumber(heightPercent)}%:${formatNumber(opacity * 100)}%`;
+    };
+    const rectangle =
+      animatedAffineCurves.length > 0
+        ? animatedFrames
+            .map((frame) => `${frame}=${rectangleAtFrame(frame)}`)
+            .join(";")
+        : rectangleAtFrame(0);
+    const rotation = animatedAffineCurves.some(
+      (curve) => curve.parameter === "transform.rotation",
+    )
+      ? animatedTransformProperty(
+          clip,
+          sequence,
+          "transform.rotation",
+          transform.rotation,
+          animatedFrames,
+        )
+      : formatNumber(transform.rotation);
     lines.push(
       ...compileFilter(`filter_affine_${clip.id}`, "affine", [
         ["use_normalized", 1],
         ["transition.rect", rectangle],
-        ["transition.fix_rotate_z", formatNumber(transform.rotation)],
+        ["transition.fix_rotate_z", rotation],
         ["transition.fill", 1],
         ["transition.distort", 1],
       ]),
@@ -2163,6 +2341,14 @@ function compileGenerator(
 }
 
 function assertNestedSequenceSupport(item: NestedSequence): void {
+  if ((item.automationCurves ?? []).length > 0) {
+    capabilityUnavailable(
+      "Animated nested-sequence transforms are not mapped by the MLT adapter",
+      "nestedSequence.automationCurves",
+      item.automationCurves,
+      ["animate the source clips inside the nested sequence"],
+    );
+  }
   const transform = item.transform;
   const defaultTransform =
     transform.positionX === 0 &&

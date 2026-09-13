@@ -118,6 +118,7 @@ const implementedOperations = new Set([
   "clip.group",
   "clip.ungroup",
   "item.transform.set",
+  "item.automation.set",
   "video.position.set",
   "video.anchor.set",
   "video.scale.set",
@@ -329,6 +330,7 @@ const operationFamilies: Record<string, string[]> = {
   ],
   transform: [
     "item.transform.set",
+    "item.automation.set",
     "video.position.set",
     "video.anchor.set",
     "video.scale.set",

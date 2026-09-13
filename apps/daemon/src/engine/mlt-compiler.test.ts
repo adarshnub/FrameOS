@@ -484,6 +484,58 @@ describe("MLT compiler", () => {
     expect(compiled).not.toContain(
       '<property name="mlt_service">volume</property>',
     );
+
+    clip.automationCurves = [
+      {
+        id: createId(),
+        parameter: "transform.scaleX",
+        keyframes: [
+          {
+            id: createId(),
+            time: frameTime(0, sequence.format.frameRate),
+            value: 1,
+            interpolation: "linear",
+          },
+          {
+            id: createId(),
+            time: frameTime(48, sequence.format.frameRate),
+            value: 1.25,
+            interpolation: "linear",
+          },
+        ],
+      },
+      {
+        id: createId(),
+        parameter: "transform.rotation",
+        keyframes: [
+          {
+            id: createId(),
+            time: frameTime(0, sequence.format.frameRate),
+            value: 0,
+            interpolation: "linear",
+          },
+          {
+            id: createId(),
+            time: frameTime(48, sequence.format.frameRate),
+            value: 8,
+            interpolation: "linear",
+          },
+        ],
+      },
+    ];
+    const animated = compileMltXml(project, undefined, {
+      availableCapabilities: new Set([
+        "mlt.filter.affine",
+        "mlt.filter.avfilter.volume",
+        "mlt.filter.crop",
+        "mlt.filter.panner",
+      ]),
+    });
+    expect(animated).toContain('<property name="transition.rect">0=');
+    expect(animated).toContain("48=");
+    expect(animated).toContain(
+      '<property name="transition.fix_rotate_z">0=0;48=8;60=8</property>',
+    );
   });
 
   it("maps static primary color controls without exposing raw properties", () => {

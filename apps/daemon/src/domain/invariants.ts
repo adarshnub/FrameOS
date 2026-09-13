@@ -614,6 +614,31 @@ export function validateProject(project: Project): Project {
         if ("effects" in item) {
           validateEffectIds(item.effects);
         }
+        if (
+          item.type === "clip" ||
+          item.type === "title" ||
+          item.type === "nested_sequence"
+        ) {
+          const curves = item.automationCurves ?? [];
+          validateAutomationCurveIds(curves);
+          for (const curve of curves) {
+            for (const keyframe of curve.keyframes) {
+              if (
+                compareTime(keyframe.time, {
+                  value: 0,
+                  rate: keyframe.time.rate,
+                }) < 0 ||
+                compareTime(keyframe.time, item.timelineRange.duration) > 0
+              ) {
+                throw new FrameOSError(
+                  "VALIDATION_ERROR",
+                  `Timeline item ${item.id} automation keyframe is outside its duration`,
+                  422,
+                );
+              }
+            }
+          }
+        }
         if (item.type === "clip") {
           let previousTime = item.timeMap[0]?.time;
           for (const [index, keyframe] of item.timeMap.entries()) {

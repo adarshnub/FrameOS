@@ -10,6 +10,7 @@ import {
   entityIdSchema,
   gapSchema,
   itemGroupSchema,
+  itemAutomationCurveSchema,
   markerSchema,
   keyframeSchema,
   maskPointSchema,
@@ -916,6 +917,21 @@ export const itemTransformSetOperationSchema = z
         sequenceId: entityIdSchema,
         trackId: entityIdSchema,
         transform: transformSchema,
+      })
+      .strict(),
+  })
+  .strict();
+
+export const itemAutomationSetOperationSchema = z
+  .object({
+    ...operationBase,
+    type: z.literal("item.automation.set"),
+    targetId: entityIdSchema,
+    arguments: z
+      .object({
+        sequenceId: entityIdSchema,
+        trackId: entityIdSchema,
+        automationCurves: z.array(itemAutomationCurveSchema).max(128),
       })
       .strict(),
   })
@@ -2149,6 +2165,7 @@ export const operationSchema = z.discriminatedUnion("type", [
   clipGroupOperationSchema,
   clipUngroupOperationSchema,
   itemTransformSetOperationSchema,
+  itemAutomationSetOperationSchema,
   videoPositionSetOperationSchema,
   videoAnchorSetOperationSchema,
   videoScaleSetOperationSchema,
@@ -2304,6 +2321,7 @@ export const executableOperationSchemas = {
   "clip.group": clipGroupOperationSchema,
   "clip.ungroup": clipUngroupOperationSchema,
   "item.transform.set": itemTransformSetOperationSchema,
+  "item.automation.set": itemAutomationSetOperationSchema,
   "video.position.set": videoPositionSetOperationSchema,
   "video.anchor.set": videoAnchorSetOperationSchema,
   "video.scale.set": videoScaleSetOperationSchema,

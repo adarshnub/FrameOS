@@ -562,3 +562,94 @@ describe("AI edit compiler", () => {
     ).toBe(false);
   });
 });
+
+it("applies a portrait canvas and independent crop and position", () => {
+  const { result } = mediaPlan([
+    { type: "canvas", label: "Portrait", width: 1080, height: 1920 },
+    {
+      type: "reframe",
+      label: "Subject framing",
+      item: "shot",
+      values: { positionX: 120, cropLeft: 0.1, scaleX: 1.4 },
+    },
+  ]);
+  const sequence = result.sequences[result.settings.defaultSequenceId]!;
+  expect(sequence.format.width).toBe(1080);
+  expect(sequence.format.height).toBe(1920);
+  const clip = sequence.tracks
+    .flatMap((t) => t.items)
+    .find((i) => i.type === "clip");
+  expect(clip && "transform" in clip && clip.transform.positionX).toBe(120);
+});
+
+it("compiles transform animation curves with local second-based keyframes", () => {
+  const { result, steps } = mediaPlan([
+    {
+      type: "transform_animation",
+      label: "Camera push in",
+      item: "shot",
+      curves: [
+        {
+          parameter: "transform.scaleX",
+          keyframes: [
+            { time: 0, value: 1, interpolation: "linear" },
+            { time: 6, value: 1.2, interpolation: "linear" },
+          ],
+        },
+        {
+          parameter: "transform.scaleY",
+          keyframes: [
+            { time: 0, value: 1, interpolation: "linear" },
+            { time: 6, value: 1.2, interpolation: "linear" },
+          ],
+        },
+      ],
+    },
+  ]);
+  const clip = result.sequences[
+    result.settings.defaultSequenceId
+  ]!.tracks.flatMap((track) => track.items).find(
+    (item) => item.type === "clip",
+  );
+  expect(steps.at(-1)?.op.type).toBe("item.automation.set");
+  expect(
+    clip && "automationCurves" in clip && clip.automationCurves,
+  ).toHaveLength(2);
+});
+
+it("builds deterministic camera-shake curves from a bounded macro", () => {
+  const make = () =>
+    mediaPlan([
+      {
+        type: "camera_shake",
+        label: "Reference handheld motion",
+        item: "shot",
+        amplitudePixels: 18,
+        rotationDegrees: 1.2,
+        frequencyHz: 4,
+        overscan: 1.08,
+        seed: 42,
+      },
+    ]);
+  const first = make();
+  const second = make();
+  const curves = first.result.sequences[
+    first.result.settings.defaultSequenceId
+  ]!.tracks.flatMap((track) => track.items).find(
+    (item) => item.type === "clip",
+  );
+  const otherCurves = second.result.sequences[
+    second.result.settings.defaultSequenceId
+  ]!.tracks.flatMap((track) => track.items).find(
+    (item) => item.type === "clip",
+  );
+  const values = (item: typeof curves) =>
+    item && "automationCurves" in item
+      ? item.automationCurves?.map((curve) =>
+          curve.keyframes.map((keyframe) => keyframe.value),
+        )
+      : undefined;
+  expect(first.steps.at(-1)?.op.type).toBe("item.automation.set");
+  expect(values(curves)).toHaveLength(5);
+  expect(values(curves)).toEqual(values(otherCurves));
+});
