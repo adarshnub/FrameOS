@@ -429,9 +429,9 @@ function segmentsFromResponse(
             objects: [],
             activities: [],
             startSeconds: 0,
-            ...(durationMs === undefined
-              ? {}
-              : { endSeconds: durationMs / 1_000 }),
+            // Analysis can run without the native probe. Keep the fallback
+            // segment bounded so reference-mode planning can consume it.
+            endSeconds: Math.max(1, durationMs ?? 1_000) / 1_000,
           },
         ],
       };

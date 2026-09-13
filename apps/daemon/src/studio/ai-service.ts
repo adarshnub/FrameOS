@@ -72,9 +72,9 @@ export function vertexEditGenerator(
       config.location === "global"
         ? "aiplatform.googleapis.com"
         : config.location + "-aiplatform.googleapis.com";
-    const response = await fetch(
-      `https://${endpoint}/v1/projects/${encodeURIComponent(config.projectId)}/locations/${encodeURIComponent(config.location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent`,
-      {
+    const requestUrl =
+      `https://${endpoint}/v1/projects/${encodeURIComponent(config.projectId)}/locations/${encodeURIComponent(config.location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent`;
+    const requestInit: RequestInit = {
         method: "POST",
         signal,
         redirect: "error",
@@ -113,8 +113,29 @@ export function vertexEditGenerator(
             // schema support. Validate the JSON locally before any approval.
           },
         }),
-      },
-    );
+      };
+    let response = await fetch(requestUrl, requestInit);
+    // Vertex may return a transient 429 while the analysis requests that
+    // precede planning are still settling. Honor Retry-After once so a user
+    // does not have to reconstruct the entire reference workflow.
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get("retry-after"));
+      const delayMs = Number.isFinite(retryAfter)
+        ? Math.min(30_000, Math.max(1_000, retryAfter * 1_000))
+        : 10_000;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, delayMs);
+        signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      });
+      response = await fetch(requestUrl, requestInit);
+    }
     if (!response.ok)
       throw new FrameOSError(
         "PLUGIN_FAILURE",
@@ -270,8 +291,11 @@ export class StudioAiService {
             document.assetHash !== reference.hash
           )
             continue;
+          // A model fallback may produce a document-level style summary
+          // without a precise time range (for example when native probing is
+          // unavailable). It is still valid reference guidance, so retain
+          // those segments and let the planner treat the range as optional.
           referenceAnalysis = document.segments
-            .filter((s) => s.range)
             .slice(0, 120)
             .map((s) => ({
               range: s.range,
