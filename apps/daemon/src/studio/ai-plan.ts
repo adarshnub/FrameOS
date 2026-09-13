@@ -17,6 +17,16 @@ export const aiActionSchema = z.discriminatedUnion("type", [
   z
     .object({
       ...base,
+      type: z.literal("transition"),
+      from: ref,
+      to: ref,
+      duration: z.number().finite().min(0.08).max(3),
+      kind: z.literal("dissolve"),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
       type: z.literal("track"),
       ref,
       name: z.string().min(1).max(100),
@@ -109,6 +119,7 @@ export const aiPlanRequestSchema = z
     baseRevision: z.int().nonnegative(),
     brief: z.string().trim().min(1).max(8000),
     assetIds: z.array(z.uuid()).max(20).default([]),
+    referenceAssetId: z.uuid().optional(),
     selectedItemId: z.uuid().nullable().optional(),
     playhead: seconds.default(0),
     durations: z.record(z.uuid(), seconds.positive()).default({}),
@@ -116,6 +127,43 @@ export const aiPlanRequestSchema = z
   })
   .strict();
 export type AiPlanRequest = z.infer<typeof aiPlanRequestSchema>;
+export const visualReviewRequestSchema = aiPlanRequestSchema
+  .extend({
+    frames: z
+      .array(
+        z
+          .object({
+            role: z.enum(["timeline", "reference"]),
+            at: seconds,
+            jpeg: z
+              .string()
+              .min(16)
+              .max(350000)
+              .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(12),
+    pendingEdits: z.array(z.string().max(300)).max(60).default([]),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (!value.frames.some((f) => f.role === "timeline"))
+      context.addIssue({
+        code: "custom",
+        message: "Timeline preview frames are required.",
+      });
+    if (
+      value.referenceAssetId &&
+      !value.frames.some((f) => f.role === "reference")
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Reference preview frames are required.",
+      });
+  });
+export type VisualReviewRequest = z.infer<typeof visualReviewRequestSchema>;
 export type AiPlan = z.infer<typeof aiPlanSchema>;
 export interface AiStep {
   label: string;
@@ -206,6 +254,8 @@ export function compileAiPlan(
         },
       };
     } else if (a.type === "add") {
+      if (a.assetId === request.referenceAssetId)
+        throw Error("Reference footage cannot be added to the output.");
       if (request.assetIds.length && !request.assetIds.includes(a.assetId))
         throw Error("AI tried to add media outside your selection.");
       sourceBounds(a.assetId, a.source, a.duration);
@@ -238,6 +288,85 @@ export function compileAiPlan(
           effects: [],
           links: [],
           semanticMetadata: {},
+        },
+      };
+    } else if (a.type === "transition") {
+      const left = locate(a.from),
+        right = locate(a.to);
+      if (
+        left.track.id !== right.track.id ||
+        left.track.kind !== "video" ||
+        left.item.type !== "clip" ||
+        right.item.type !== "clip"
+      )
+        throw Error("Dissolves require two video clips on the same track.");
+      const cut = toSeconds(right.item.timelineRange.start);
+      if (
+        !left.item.enabled ||
+        !right.item.enabled ||
+        left.item.timeMap.length ||
+        right.item.timeMap.length ||
+        project.assets[left.item.assetId]?.kind !== "video" ||
+        project.assets[right.item.assetId]?.kind !== "video"
+      )
+        throw Error("Dissolves require enabled, unretimed video clips.");
+      const leftEnd =
+        toSeconds(left.item.timelineRange.start) +
+        toSeconds(left.item.timelineRange.duration);
+      // Keep both handles on whole frames, including fractional frame rates.
+      const half = toSeconds(time(a.duration / 2)),
+        duration = half * 2;
+      if (
+        half <= 0 ||
+        Math.abs(leftEnd - cut) > 0.0001 ||
+        half > toSeconds(left.item.timelineRange.duration) ||
+        half > toSeconds(right.item.timelineRange.duration)
+      )
+        throw Error(
+          "Dissolves must bridge adjacent clips and fit their durations.",
+        );
+      sourceBounds(
+        left.item.assetId,
+        toSeconds(left.item.sourceRange.start),
+        toSeconds(left.item.sourceRange.duration) + half,
+      );
+      if (toSeconds(right.item.sourceRange.start) < half)
+        throw Error("The incoming clip needs source handles for a dissolve.");
+      sourceBounds(
+        right.item.assetId,
+        toSeconds(right.item.sourceRange.start) - half,
+        toSeconds(right.item.sourceRange.duration) + half,
+      );
+      if (
+        left.track.items.some(
+          (i) =>
+            i.type === "transition" &&
+            toSeconds(i.timelineRange.start) < cut + half &&
+            toSeconds(i.timelineRange.start) +
+              toSeconds(i.timelineRange.duration) >
+              cut - half,
+        )
+      )
+        throw Error("Dissolves cannot overlap.");
+      trackId = left.track.id;
+      itemId = createId();
+      type = "transition.add";
+      args = {
+        sequenceId,
+        trackId,
+        transition: {
+          id: itemId,
+          type: "transition",
+          name: "Dissolve",
+          capabilityId: "frameos.transition.dissolve",
+          fromItemId: left.item.id,
+          toItemId: right.item.id,
+          timelineRange: range(cut - half, duration),
+          enabled: true,
+          locked: false,
+          metadata: {},
+          parameters: {},
+          automationCurves: [],
         },
       };
     } else if (a.type === "title") {

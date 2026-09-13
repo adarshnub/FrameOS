@@ -1,5 +1,60 @@
 # Visual Studio
 
+## Reference-guided editing (phase 1)
+
+In **Edit assistant**, import a reference video or choose one from the imported
+videos. Select separate source clips in **Your media**, enter a brief such as
+"Match the reference's pacing and highlight structure using my selected clips",
+then choose **Plan edits with AI**. Review the proposal and its warnings before
+choosing **Approve & watch edits**.
+
+Reference mode automatically analyzes the reference's shot boundaries, pacing,
+shot roles, framing, highlights and observed transitions, then analyzes selected
+footage for matching moments. Analysis uses the configured Vertex Gemini account
+and existing duration/cost limits. Cached analysis is keyed by asset hash,
+analyzer version and purpose; reference analysis is separate from source analysis.
+The server requires persisted reference analysis and source ranges. The reference
+is excluded from generated timeline clips even if accidentally selected as media.
+
+Phase 1 supports hard cuts, variable shot lengths, highlight assembly, basic
+titles/picture adjustments, and video dissolves. Dissolves are real timeline
+transitions, with adjacent clip, source-handle, lock and overlap validation.
+Browser playback composites the two video sources during a dissolve; audio switches
+at the cut. Native dissolve export requires the MLT luma capability. Wipes,
+complex speed ramps, grading and full audio mixing are not matched exactly;
+the proposal must explain approximations or ask for clarification. Plans remain
+limited to 60 actions and 20 selected assets. Model-derived timing/style is an
+estimate, not a frame-exact reconstruction of an arbitrary reference.
+
+### Visual checkpoints
+
+**Visually review edits as they run** is enabled by default. After every ten
+applied operations (up to two intermediate checks) and at completion, the browser
+samples the edited timeline and, when selected, the reference video. A maximum
+of three reviews is shared across a plan and its approved corrections. Frames
+include browser-visible picture transforms, dissolve blends and approximate title
+layout. The playhead is restored after capture. This uses the configured Gemini
+account and incurs additional model usage.
+
+Gemini receives actual JPEG images, their timestamps, the current timeline,
+analysis and the original brief. It can propose a replacement for the remaining
+steps, including corrections. Execution pauses for approval of that replacement;
+no proposed correction is applied automatically. With no correction proposed,
+the approved steps continue. Capture/provider errors stop execution and retain
+applied edits. Stop discards an in-flight review result. Revision checks reject
+evidence or proposals if the project changes.
+
+`POST /api/v1/studio/ai/review` is bearer authenticated, limited to three requests
+per minute and a 5 MiB body, and accepts at most twelve bounded JPEG frames.
+Proposed changes use the existing action compiler and transaction validation.
+This is sampled visual feedback, not continuous viewing or a rendered-output
+quality guarantee. It cannot verify audio, continuous motion or native-only
+effects; unsampled moments may contain problems. Connected-controller proposals
+do not automatically opt into visual review.
+
+Implementation has compilation/syntax verification only. Live provider, visual
+matching, playback and rendered-output acceptance testing are deferred.
+
 Open `http://127.0.0.1:31415/studio`. Connect using the daemon's bearer token.
 The new workspace replaces the analysis-first page. The previous operation
 workbench remains accessible through **All tools** (`/studio/legacy`); the

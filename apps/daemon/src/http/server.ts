@@ -53,7 +53,10 @@ import { landingCss, landingHtml, landingJavaScript } from "../site/page.js";
 import { studioCss, studioHtml, studioJavaScript } from "../studio/editor.js";
 import * as legacyStudio from "../studio/page.js";
 import { StudioAiService } from "../studio/ai-service.js";
-import { aiPlanRequestSchema } from "../studio/ai-plan.js";
+import {
+  aiPlanRequestSchema,
+  visualReviewRequestSchema,
+} from "../studio/ai-plan.js";
 import type { LogLevel } from "../observability/observability-service.js";
 
 const createProjectInputSchema = z
@@ -382,7 +385,9 @@ export async function buildHttpServer(
       .type("image/png")
       .header("cache-control", "public, max-age=3600")
       .send(
-        await readFile(new URL("../../assets/editor-showcase.png", import.meta.url)),
+        await readFile(
+          new URL("../../assets/editor-showcase.png", import.meta.url),
+        ),
       );
   });
   app.get("/site/app.css", async (_request, reply) => {
@@ -1026,6 +1031,23 @@ export async function buildHttpServer(
   });
 
   const studioAi = new StudioAiService(services);
+  app.post(
+    "/api/v1/studio/ai/review",
+    {
+      bodyLimit: 5 * 1024 * 1024,
+      config: { rateLimit: { max: 3, timeWindow: "1 minute" } },
+    },
+    async (request) => {
+      const { frames, pendingEdits, ...input } =
+        visualReviewRequestSchema.parse(request.body);
+      return successEnvelope(
+        await studioAi.plan(input, AbortSignal.timeout(120000), {
+          frames,
+          pendingEdits,
+        }),
+      );
+    },
+  );
   app.post(
     "/api/v1/studio/ai/plan",
     { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },

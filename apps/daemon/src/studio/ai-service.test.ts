@@ -24,7 +24,7 @@ describe("Vertex edit response handling", () => {
       string,
       { items: { anyOf: unknown[] } }
     >;
-    expect(properties.actions!.items.anyOf).toHaveLength(10);
+    expect(properties.actions!.items.anyOf).toHaveLength(11);
   });
   it("keeps action variants, enum discriminators and consistent field order", () => {
     expect(
