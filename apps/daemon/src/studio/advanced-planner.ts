@@ -122,10 +122,6 @@ export function validateAdvancedSteps(
   let draft = structuredClone(project);
   const steps: AiStep[] = [];
   const allowedAssets = new Set(request.assetIds);
-  for (const sequence of Object.values(project.sequences))
-    for (const track of sequence.tracks)
-      for (const item of track.items)
-        if (item.type === "clip") allowedAssets.add(item.assetId);
   allowedAssets.delete(request.referenceAssetId ?? "");
   for (const step of rawSteps) {
     const raw = operationSchema.parse(step.operation);
