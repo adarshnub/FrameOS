@@ -163,16 +163,20 @@ export function validateAdvancedSteps(
                     sequence.format.frameRate,
                   ),
                 },
-                sourceRange: {
-                  start: fromSeconds(
-                    toSeconds(parsed.arguments.item.sourceRange.start),
-                    project.assets[parsed.arguments.item.assetId]?.duration?.rate ?? sequence.format.frameRate,
-                  ),
-                  duration: fromSeconds(
-                    toSeconds(parsed.arguments.item.sourceRange.duration),
-                    project.assets[parsed.arguments.item.assetId]?.duration?.rate ?? sequence.format.frameRate,
-                  ),
-                },
+                ...(parsed.arguments.item.type === "clip"
+                  ? {
+                      sourceRange: {
+                        start: fromSeconds(
+                          toSeconds(parsed.arguments.item.sourceRange.start),
+                          project.assets[parsed.arguments.item.assetId]?.duration?.rate ?? sequence.format.frameRate,
+                        ),
+                        duration: fromSeconds(
+                          toSeconds(parsed.arguments.item.sourceRange.duration),
+                          project.assets[parsed.arguments.item.assetId]?.duration?.rate ?? sequence.format.frameRate,
+                        ),
+                      },
+                    }
+                  : {}),
               },
             },
           }
