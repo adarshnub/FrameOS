@@ -672,7 +672,7 @@ function descriptor(config: GeminiConfig): AnalyzerDescriptor {
       additionalProperties: false,
       properties: {
         purpose: { type: "string", enum: ["source", "reference"] },
-        maxOutputTokens: { type: "integer", minimum: 128, maximum: 8192 },
+        maxOutputTokens: { type: "integer", minimum: 128, maximum: 32768 },
       },
     },
   };
@@ -743,7 +743,7 @@ export function loadVertexGeminiAnalyzer(
           : durationMs / 1_000) *
           config.inputTokensPerSecond *
           config.inputPricePerMillion +
-          8_192 * config.outputPricePerMillion) /
+                    32_768 * config.outputPricePerMillion) /
         1_000_000;
       if (estimatedMax > config.maxCostUsd)
         throw new FrameOSError(
@@ -827,10 +827,10 @@ export function loadVertexGeminiAnalyzer(
                 generationConfig: {
                   temperature: 0,
                   maxOutputTokens: Math.min(
-                    8_192,
+                    32_768,
                     Math.max(
                       128,
-                      Number(context.parameters.maxOutputTokens) || 8_192,
+                      Number(context.parameters.maxOutputTokens) || 32_768,
                     ),
                   ),
                   ...(config.model.startsWith("gemini-2.5-")
