@@ -105,7 +105,14 @@ const executionSchema = z
 
 function parse<T>(schema: z.ZodType<T>, text: string): T {
   try {
-    return schema.parse(JSON.parse(text));
+    const cleaned = text
+      .replace(/^\s*```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/i, "")
+      .trim();
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    const json = start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+    return schema.parse(JSON.parse(json));
   } catch {
     throw new FrameOSError(
       "PLUGIN_FAILURE",
