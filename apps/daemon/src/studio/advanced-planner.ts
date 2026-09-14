@@ -144,9 +144,26 @@ export function validateAdvancedSteps(
   if (!sequence)
     throw new FrameOSError("VALIDATION_ERROR", "Default sequence is missing", 422);
   for (const step of rawSteps) {
+    const candidate = step.operation as { type?: unknown; arguments?: { item?: { assetId?: unknown } } };
+    if (
+      candidate.type === "item.add" &&
+      candidate.arguments?.item?.assetId === request.referenceAssetId
+    )
+      throw new FrameOSError(
+        "FORBIDDEN",
+        "Advanced plan cannot insert the reference asset",
+        403,
+      );
     const parsed = operationSchema.parse(step.operation);
+    const addItem = parsed.type === "item.add" ? parsed.arguments.item : undefined;
+    const canNormalize =
+      addItem?.type === "clip" &&
+      typeof addItem.timelineRange.start.value === "number" &&
+      typeof addItem.timelineRange.duration.value === "number" &&
+      typeof addItem.sourceRange.start.value === "number" &&
+      typeof addItem.sourceRange.duration.value === "number";
     const raw =
-      parsed.type === "item.add"
+      parsed.type === "item.add" && canNormalize
         ? {
             ...parsed,
             arguments: {
