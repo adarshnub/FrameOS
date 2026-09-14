@@ -4,12 +4,12 @@ steps:
       - build
       - --no-cache
       - -t
-      - ${_IMAGE}:$COMMIT_SHA
+      - ${_IMAGE}:$BUILD_ID
       - -t
       - ${_IMAGE}:latest
       - .
   - name: gcr.io/cloud-builders/docker
-    args: [push, '${_IMAGE}:$COMMIT_SHA']
+    args: [push, '${_IMAGE}:$BUILD_ID']
   - name: gcr.io/cloud-builders/docker
     args: [push, '${_IMAGE}:latest']
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -25,9 +25,9 @@ steps:
           --quiet \
           --command='set -euo pipefail
             gcloud auth print-access-token | sudo docker login -u oauth2accesstoken --password-stdin https://${_REGION}-docker.pkg.dev >/dev/null
-            sudo docker pull ${_IMAGE}:$COMMIT_SHA
+            sudo docker pull ${_IMAGE}:$BUILD_ID
             sudo docker rm -f frameos >/dev/null 2>&1 || true
-            sudo docker run -d --name frameos --restart always --env-file /opt/frameos/.env -v /opt/frameos/data:/app/.frameos-data -p 31415:31415 ${_IMAGE}:$COMMIT_SHA
+            sudo docker run -d --name frameos --restart always --env-file /opt/frameos/.env -v /opt/frameos/data:/app/.frameos-data -p 31415:31415 ${_IMAGE}:$BUILD_ID
             sleep 4
             test "$(sudo docker inspect -f "{{.State.Running}}" frameos)" = "true"
           '
