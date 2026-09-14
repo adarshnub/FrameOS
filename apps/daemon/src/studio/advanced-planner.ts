@@ -113,10 +113,11 @@ function parse<T>(schema: z.ZodType<T>, text: string): T {
     const end = cleaned.lastIndexOf("}");
     const json = start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
     return schema.parse(JSON.parse(json));
-  } catch {
+  } catch (error) {
+    const detail = error instanceof Error ? ` ${error.message}` : "";
     throw new FrameOSError(
       "PLUGIN_FAILURE",
-      "Advanced planner returned invalid structured output. No edits were applied.",
+      `Advanced planner returned invalid structured output.${detail} No edits were applied.`,
       502,
     );
   }
