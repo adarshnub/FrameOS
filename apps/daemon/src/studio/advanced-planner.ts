@@ -7,6 +7,8 @@ import {
   FrameOSError,
   type CapabilityDescriptor,
   type Project,
+  fromSeconds,
+  toSeconds,
 } from "@frameos/contracts";
 import { executeOperations } from "../domain/operation-executor.js";
 import { compileMltXml } from "../engine/mlt-compiler.js";
@@ -138,8 +140,33 @@ export function validateAdvancedSteps(
   const steps: AiStep[] = [];
   const allowedAssets = new Set(request.assetIds);
   allowedAssets.delete(request.referenceAssetId ?? "");
+  const sequence = project.sequences[project.settings.defaultSequenceId];
+  if (!sequence)
+    throw new FrameOSError("VALIDATION_ERROR", "Default sequence is missing", 422);
   for (const step of rawSteps) {
-    const raw = operationSchema.parse(step.operation);
+    const parsed = operationSchema.parse(step.operation);
+    const raw =
+      parsed.type === "item.add"
+        ? {
+            ...parsed,
+            arguments: {
+              ...parsed.arguments,
+              item: {
+                ...parsed.arguments.item,
+                timelineRange: {
+                  start: fromSeconds(
+                    toSeconds(parsed.arguments.item.timelineRange.start),
+                    sequence.format.frameRate,
+                  ),
+                  duration: fromSeconds(
+                    toSeconds(parsed.arguments.item.timelineRange.duration),
+                    sequence.format.frameRate,
+                  ),
+                },
+              },
+            },
+          }
+        : parsed;
     if (!selected.has(raw.type))
       throw new FrameOSError(
         "FORBIDDEN",
