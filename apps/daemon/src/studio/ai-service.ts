@@ -105,7 +105,10 @@ export function vertexEditGenerator(
         ],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 8192,
+          // Advanced plans include fully expanded canonical operations. Keep
+          // enough headroom for the detailed execution stage to finish its
+          // JSON instead of returning a truncated response.
+          maxOutputTokens: 16384,
           ...(model.startsWith("gemini-2.5-")
             ? { thinkingConfig: { thinkingBudget: 1024 } }
             : {}),
