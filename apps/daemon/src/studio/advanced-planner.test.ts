@@ -187,6 +187,8 @@ describe("advanced capability routing and planning", () => {
     expect(result.usage).toEqual({ inputTokens: 30, outputTokens: 15 });
     expect(f.clip.transform.positionX).toBe(0);
     expect(generate.mock.calls[2]?.[0]).not.toContain("C:/media/source.mp4");
+    expect(generate.mock.calls[0]?.[0]).toContain("SOURCE ASSET IDS");
+    expect(generate.mock.calls[0]?.[0]).toContain("REFERENCE ASSET ID");
   });
   it("fails before provider costs without a native worker", async () => {
     const f = fixture();
