@@ -745,7 +745,10 @@ export function compileAiPlan(
           name: asset.name,
           assetId,
           timelineRange: range(a.start, a.duration),
-          sourceRange: range(a.source, a.duration),
+          sourceRange: {
+            start: fromSeconds(a.source, asset.duration?.rate ?? seq().format.frameRate).time,
+            duration: fromSeconds(a.duration, asset.duration?.rate ?? seq().format.frameRate).time,
+          },
           enabled: true,
           locked: false,
           metadata: {},
