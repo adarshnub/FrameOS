@@ -332,7 +332,7 @@ export async function planAdvanced(input: {
     })),
   };
   const executionPrompt =
-    "STAGE: detailed execution. Return canonical operations, valid UUIDs for new entities, rational frame times, and descriptive labels. Use existing UUIDs from PROJECT DATA; never aliases. Every intermediate step must be valid because approval executes one step at a time. Preserve original tracks; disable rather than delete originals for a new montage. Only selected source assets may be inserted; never insert the reference. Do not change locked state or access files/URLs. Honour every requirement or state inability.\nINTENT AND TOOLS:\n" +
+    "STAGE: detailed execution. Return canonical operations, valid UUIDs for new entities, rational frame times, and descriptive labels. Use existing UUIDs from PROJECT DATA; never aliases. Every intermediate step must be valid because approval executes one step at a time. Preserve original tracks; disable rather than delete originals for a new montage. Only selected source assets may be inserted; never insert the reference. If a requested clip is not already present in PROJECT DATA, insert it first with item.add on a compatible enabled track, then use its new item UUID for trim, crop, audio, or other edits. Never claim item.add or clip.append is unavailable when it is listed in AVAILABLE TOOLS. Do not change locked state or access files/URLs. Honour every requirement or state inability.\nINTENT AND TOOLS:\n" +
     JSON.stringify({ intent, selection }) +
     "\nCONTEXT DATA:\n" +
     JSON.stringify(input.context) +
