@@ -29,7 +29,8 @@ steps:
             sudo docker rm -f frameos >/dev/null 2>&1 || true
             sudo docker run -d --name frameos --restart always --env-file /opt/frameos/.env -v /opt/frameos/data:/app/.frameos-data -p 31415:31415 ${_IMAGE}:$COMMIT_SHA
             sleep 4
-            test "$(sudo docker inspect -f "{{.State.Running}}" frameos)" = "true"'
+            test "$(sudo docker inspect -f "{{.State.Running}}" frameos)" = "true"
+          '
 substitutions:
   _REGION: asia-south1
   _IMAGE: asia-south1-docker.pkg.dev/gen-lang-client-0644821693/frameos/frameos-daemon
