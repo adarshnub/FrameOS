@@ -113,6 +113,21 @@ function parse<T>(schema: z.ZodType<T>, text: string): T {
   }
 }
 
+// Models sometimes acknowledge a clear request in the clarification field
+// instead of returning the required empty string. Treat those acknowledgements
+// as no clarification so a valid plan can continue to tool selection.
+function normalizeClarification(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/[.!?]+$/, "");
+  if (
+    !normalized ||
+    /^(no|none|nothing)\b.*\bclarif(?:ication|y)\b/.test(normalized) ||
+    /\b(no further clarification is needed|no clarification is needed|no clarification needed)\b/.test(normalized) ||
+    /^(the brief is clear|request is clear|instructions are clear)\b/.test(normalized)
+  )
+    return "";
+  return value.trim();
+}
+
 export function validateAdvancedSteps(
   project: Project,
   rawSteps: z.infer<typeof executionSchema>["steps"],
@@ -244,7 +259,7 @@ export async function planAdvanced(input: {
   const intent = parse(
     intentSchema,
     await run(
-      "STAGE: intent. Extract requirements and ambiguity.\nCONTEXT DATA:\n" +
+    "STAGE: intent. Extract requirements and ambiguity. Set clarification to an empty string when the brief is clear; only write a concise question there when an actual ambiguity blocks execution.\nCONTEXT DATA:\n" +
         JSON.stringify(input.context),
       z.toJSONSchema(intentSchema),
     ),
@@ -256,6 +271,7 @@ export async function planAdvanced(input: {
     usage: { ...usage },
     steps: [] as AiStep[],
   });
+  intent.clarification = normalizeClarification(intent.clarification);
   if (intent.clarification)
     return {
       ...base(),
