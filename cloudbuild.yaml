@@ -31,7 +31,6 @@ steps:
           --quiet \
           --command='sudo bash /tmp/frameos-deploy-$BUILD_ID.sh ${_IMAGE}:$BUILD_ID'
 substitutions:
-  _REGION: asia-south1
   _IMAGE: asia-south1-docker.pkg.dev/gen-lang-client-0644821693/frameos/frameos-daemon
   _VM_NAME: frameos-studio
   _VM_ZONE: asia-south1-a
