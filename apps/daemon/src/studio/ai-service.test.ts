@@ -12,12 +12,26 @@ import {
   StudioAiService,
   vertexEditGenerator,
   vertexSchema,
+  editorTimeoutMs,
   type GenerateEdit,
 } from "./ai-service.js";
 import { AccessTokenProvider } from "../analysis/vertex-gemini-analyzer.js";
 
 describe("Vertex edit response handling", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+  it("allows a bounded planning deadline for longer source collections", () => {
+    expect(editorTimeoutMs({})).toBe(600_000);
+    expect(
+      editorTimeoutMs({ FRAMEOS_GEMINI_EDITOR_TIMEOUT_MS: "1200000" }),
+    ).toBe(1_200_000);
+    for (const value of ["NaN", "0", "-1", "1200001"])
+      expect(() =>
+        editorTimeoutMs({ FRAMEOS_GEMINI_EDITOR_TIMEOUT_MS: value }),
+      ).toThrow("must be between");
+  });
   it("preserves all real Zod action variants (oneOf)", () => {
     const schema = vertexSchema(z.toJSONSchema(aiPlanSchema));
     const properties = schema.properties as Record<
@@ -73,6 +87,47 @@ describe("Vertex edit response handling", () => {
     FRAMEOS_GOOGLE_CLOUD_PROJECT: "test-project",
     FRAMEOS_GCS_BUCKET: "test-bucket",
   };
+  it.each([429, 503])("retries transient HTTP %s only once", async (status) => {
+    vi.spyOn(AccessTokenProvider.prototype, "get").mockResolvedValue(
+      "test-token",
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response("busy", { status, headers: { "retry-after": "0" } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            candidates: [
+              { finishReason: "STOP", content: { parts: [{ text: "{}" }] } },
+            ],
+          }),
+        ),
+      );
+    const pending = vertexEditGenerator(environment)(
+      "Edit",
+      new AbortController().signal,
+    );
+    expect((await pending).text).toBe("{}");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+  it("stops a capacity retry when its original deadline expires", async () => {
+    vi.spyOn(AccessTokenProvider.prototype, "get").mockResolvedValue(
+      "test-token",
+    );
+    const controller = new AbortController();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => {
+        controller.abort();
+        return new Response("busy", { status: 429 });
+      });
+    await expect(
+      vertexEditGenerator(environment)("Edit", controller.signal),
+    ).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it("reserves output budget and excludes thought text", async () => {
     vi.spyOn(AccessTokenProvider.prototype, "get").mockResolvedValue(
       "test-token",

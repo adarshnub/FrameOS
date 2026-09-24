@@ -10,9 +10,9 @@ COPY apps/daemon/package.json apps/daemon/package.json
 COPY apps/cli/package.json apps/cli/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/sdk-typescript/package.json packages/sdk-typescript/package.json
-RUN npm ci --ignore-scripts
+RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts
 COPY . .
-RUN npm run build --workspace @frameos/contracts && npm run build --workspace @frameos/daemon
+RUN GOMAXPROCS=2 npm run build --workspace @frameos/contracts && GOMAXPROCS=2 npm run build --workspace @frameos/daemon
 RUN cmake -S native/engine-worker -B /tmp/engine-worker -DFRAMEOS_WITH_MLT=ON \
   && cmake --build /tmp/engine-worker --config Release \
   && /tmp/engine-worker/frameos-engine-worker capabilities | grep -q '\"id\":\"engine.mlt\".*\"available\":true'

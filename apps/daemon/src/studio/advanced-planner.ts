@@ -154,7 +154,8 @@ export function validateAdvancedSteps(
   for (const step of rawSteps) {
     const candidate = step.operation as { type?: unknown; arguments?: { item?: { assetId?: unknown } } };
     if (
-      candidate.type === "item.add" &&
+      request.referenceAssetId !== undefined &&
+      candidate?.type === "item.add" &&
       candidate.arguments?.item?.assetId === request.referenceAssetId
     )
       throw new FrameOSError(
@@ -182,11 +183,11 @@ export function validateAdvancedSteps(
                   start: fromSeconds(
                     toSeconds(parsed.arguments.item.timelineRange.start),
                     sequence.format.frameRate,
-                  ),
+                  ).time,
                   duration: fromSeconds(
                     toSeconds(parsed.arguments.item.timelineRange.duration),
                     sequence.format.frameRate,
-                  ),
+                  ).time,
                 },
                 ...(parsed.arguments.item.type === "clip"
                   ? {
@@ -194,11 +195,11 @@ export function validateAdvancedSteps(
                         start: fromSeconds(
                           toSeconds(parsed.arguments.item.sourceRange.start),
                           project.assets[parsed.arguments.item.assetId]?.duration?.rate ?? sequence.format.frameRate,
-                        ),
+                        ).time,
                         duration: fromSeconds(
                           toSeconds(parsed.arguments.item.sourceRange.duration),
                           project.assets[parsed.arguments.item.assetId]?.duration?.rate ?? sequence.format.frameRate,
-                        ),
+                        ).time,
                       },
                     }
                   : {}),
@@ -355,6 +356,8 @@ export async function planAdvanced(input: {
     await run(
       "STAGE: tool selection. Select at most 16 canonical operations from AVAILABLE TOOLS. List requirements that cannot be met in unsupported. Selection is not evidence of render support; the graph will be validated.\nINTENT:\n" +
         JSON.stringify(intent) +
+        "\nCONTEXT DATA (inspect existing clips before selecting insertion tools):\n" +
+        JSON.stringify(input.context) +
         "\nAVAILABLE TOOLS:\n" +
         JSON.stringify(catalog),
       z.toJSONSchema(selectionSchema),
@@ -394,11 +397,13 @@ export async function planAdvanced(input: {
   ).items.properties.operation = { anyOf: variants };
   const timeline = {
     projectId: project.projectId,
+    sourceAssets: request.assetIds.map(id => ({ id, duration: project.assets[id]?.duration })),
     defaultSequenceId: project.settings.defaultSequenceId,
     sequences: Object.values(project.sequences).map((s) => ({
       id: s.id,
       format: s.format,
       tracks: s.tracks,
+      captions: s.captions,
     })),
   };
   const executionPrompt =
@@ -407,20 +412,31 @@ export async function planAdvanced(input: {
     "\nCONTEXT DATA:\n" +
     JSON.stringify(input.context) +
     "\nPROJECT DATA:\n" +
-    JSON.stringify(timeline);
+    JSON.stringify(timeline) +
+    "\nTIMELINE RULES: Edit existing clips in place for trim requests. A source range's rate must match sourceAssets.duration.rate (not necessarily the sequence rate). Captions from 3s to 7s have start 3s and duration 4s. Items on a single track cannot overlap: put overlay titles on a separate enabled video track above the footage, or use caption tracks and cues. Include track.add in tool selection when an overlay needs a new track. For an exact final length, account for every enabled video, audio, and caption item.";
   if (executionPrompt.length + JSON.stringify(schema).length > 240000)
     throw new FrameOSError(
       "VALIDATION_ERROR",
       "Advanced planning context is too large. Use a smaller sequence.",
       422,
     );
-  const proposal = parse(executionSchema, await run(executionPrompt, schema));
-  const { draft, steps } = validateAdvancedSteps(
-    project,
-    proposal.steps,
-    names,
-    request,
-  );
+  let proposal = parse(executionSchema, await run(executionPrompt, schema));
+  let validated: ReturnType<typeof validateAdvancedSteps>;
+  try {
+    validated = validateAdvancedSteps(project, proposal.steps, names, request);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    // Repair the proposal against the original project; failed drafts never
+    // reach approval or mutate the user's timeline. Keep the same tool scope.
+    proposal = parse(executionSchema, await run(
+      executionPrompt +
+      "\nVALIDATION REPAIR: The previous proposal failed. Return a complete corrected proposal using the same selected tools. No edits were applied. Keep titles on a separate overlay track; items on the same track must not overlap. Trim an existing clip instead of inserting a duplicate. Source ranges use the source asset's rate; timeline ranges use the sequence rate. Preserve the requested output duration and caption times.\nVALIDATION ERROR:\n" +
+      (error instanceof Error ? error.message : String(error)).slice(0, 6000) +
+      "\nREJECTED PROPOSAL:\n" + JSON.stringify(proposal), schema,
+    ));
+    validated = validateAdvancedSteps(project, proposal.steps, names, request);
+  }
+  const { draft, steps } = validated;
   compileMltXml(draft, undefined, {
     availableCapabilities: new Set(
       capabilities.filter((c) => c.available).map((c) => c.id),

@@ -1970,6 +1970,10 @@ function compileClipFilters(
       ...compileFilter(`filter_affine_${clip.id}`, "affine", [
         ["use_normalized", 1],
         ["transition.rect", rectangle],
+        // Preserve opacity in the alpha channel instead of the affine
+        // filter's default atop blend, which restores an opaque source alpha.
+        ["background", "colour:0x00000000"],
+        ["transition.b_alpha", 0],
         ["transition.fix_rotate_z", rotation],
         ["transition.fill", 1],
         ["transition.distort", 1],
@@ -2254,7 +2258,7 @@ function compileProducer(
     const duration = itemDurationFrames(clip, sequence.format.frameRate);
     return [
       `  <chain id="producer_${escapeXml(clip.id)}" out="${duration - 1}">`,
-      `    <property name="mlt_service">avformat-novalidate</property>`,
+      `    <property name="mlt_service">avformat</property>`,
       `    <property name="resource">${escapeXml(resource)}</property>`,
       `    <link id="link_timeremap_${escapeXml(clip.id)}">`,
       property("mlt_service", "timeremap"),
@@ -2268,7 +2272,10 @@ function compileProducer(
   }
   return [
     `  <producer id="producer_${escapeXml(clip.id)}">`,
-    `    <property name="mlt_service">avformat-novalidate</property>`,
+    // Playlist construction needs the actual source length. The lazy
+    // avformat-novalidate service initially reports one frame and MLT clamps
+    // every entry to that length before decoding any media.
+    `    <property name="mlt_service">avformat</property>`,
     `    <property name="resource">${escapeXml(resource)}</property>`,
     ...filters,
     "  </producer>",
@@ -3111,9 +3118,10 @@ function compileSequenceGraph(
   const compiledCaptions = sequence.captions.map((track) =>
     compileCaptionTrack(track, sequence, options),
   );
-  const trackElements = sequence.tracks
+  const orderedTracks = sequence.tracks
     .filter((track) => track.enabled)
-    .toSorted((left, right) => left.order - right.order)
+    .toSorted((left, right) => left.order - right.order);
+  const trackElements = orderedTracks
     .map((track) => {
       const hide = trackHide(track);
       return `      <track producer="playlist_${escapeXml(track.id)}"${hide === undefined ? "" : ` hide="${hide}"`}/>`;
@@ -3126,6 +3134,62 @@ function compileSequenceGraph(
             `      <track producer="caption_playlist_${escapeXml(track.id)}" hide="audio"/>`,
         ),
     );
+  // A multitrack only selects frames; it does not blend pictures or sum audio
+  // by itself. Keep real MLT track indices (including hidden/empty tracks).
+  const visualTracks = orderedTracks
+    .flatMap((track, index) =>
+      track.kind === "video" &&
+      track.items.some((item) => item.enabled && item.type !== "gap")
+        ? [index]
+        : [],
+    )
+    .concat(
+      sequence.captions
+        .filter((track) => track.enabled)
+        .map((_, index) => orderedTracks.length + index),
+    );
+  const audioTracks = orderedTracks.flatMap((track, index) =>
+    !track.muted &&
+    track.items.some(
+      (item) =>
+        item.enabled &&
+        item.type === "clip" &&
+        !item.audio.muted &&
+        project.assets[item.assetId]?.kind !== "image",
+    )
+      ? [index]
+      : [],
+  );
+  const layers: string[] = [];
+  const addLayer = (
+    service: string,
+    first: number,
+    next: number,
+    properties: [string, number][],
+  ) => {
+    layers.push(
+      `    <transition id="${escapeXml(outputId)}_${service}_${next}">`,
+      property("mlt_service", service),
+      property("a_track", first),
+      property("b_track", next),
+      property("always_active", 1),
+      ...properties.map(([name, value]) => property(name, value)),
+      "    </transition>",
+    );
+  };
+  if (visualTracks.length > 1) {
+    requireCapability(options, "mlt.transition.luma", "Layer compositing");
+    for (const next of visualTracks.slice(1))
+      addLayer("luma", visualTracks[0]!, next, [["fixed", 1]]);
+  }
+  if (audioTracks.length > 1) {
+    requireCapability(options, "mlt.transition.mix", "Multitrack audio mixing");
+    for (const next of audioTracks.slice(1))
+      addLayer("mix", audioTracks[0]!, next, [
+        ["sum", 1],
+        ["start", 1],
+      ]);
+  }
   const outputFilters = compileContainerEffects(
     sequence.id,
     sequence.outputEffects,
@@ -3151,6 +3215,7 @@ function compileSequenceGraph(
     "    <multitrack>",
     ...trackElements,
     "    </multitrack>",
+    ...layers,
     ...outputFilters,
     "  </tractor>",
   ];

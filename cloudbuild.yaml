@@ -9,28 +9,26 @@ steps:
       - ${_IMAGE}:latest
       - .
   - name: gcr.io/cloud-builders/docker
-    args: [push, '${_IMAGE}:$BUILD_ID']
+    args: [push, "${_IMAGE}:$BUILD_ID"]
   - name: gcr.io/cloud-builders/docker
-    args: [push, '${_IMAGE}:latest']
+    args: [push, "${_IMAGE}:latest"]
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
     args:
       - -ceu
       - |
+        gcloud compute scp tools/deploy-daemon.sh ${_SSH_USER}@${_VM_NAME}:/tmp/frameos-deploy-$BUILD_ID.sh \
+          --zone=${_VM_ZONE} \
+          --project=${PROJECT_ID} \
+          --tunnel-through-iap \
+          --quiet
         gcloud compute ssh ${_SSH_USER}@${_VM_NAME} \
           --zone=${_VM_ZONE} \
           --project=${PROJECT_ID} \
           --tunnel-through-iap \
           --ssh-flag='-oStrictHostKeyChecking=no' \
           --quiet \
-          --command='set -euo pipefail
-            gcloud auth print-access-token | sudo docker login -u oauth2accesstoken --password-stdin https://${_REGION}-docker.pkg.dev >/dev/null
-            sudo docker pull ${_IMAGE}:$BUILD_ID
-            sudo docker rm -f frameos >/dev/null 2>&1 || true
-            sudo docker run -d --name frameos --restart always --env-file /opt/frameos/.env -v /opt/frameos/data:/app/.frameos-data -p 31415:31415 ${_IMAGE}:$BUILD_ID
-            sleep 4
-            test "$(sudo docker inspect -f "{{.State.Running}}" frameos)" = "true"
-          '
+          --command='sudo bash /tmp/frameos-deploy-$BUILD_ID.sh ${_IMAGE}:$BUILD_ID'
 substitutions:
   _REGION: asia-south1
   _IMAGE: asia-south1-docker.pkg.dev/gen-lang-client-0644821693/frameos/frameos-daemon

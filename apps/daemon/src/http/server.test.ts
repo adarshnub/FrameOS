@@ -39,6 +39,110 @@ describe("HTTP control plane", () => {
 
   const authorization = { authorization: `Bearer ${token}` };
 
+  it("streams bounded byte ranges with a project-scoped read-only playback cookie", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      headers: authorization,
+      payload: { name: "Streaming QA" },
+    });
+    const projectId = created.json().data.projectId as string;
+    const mediaPath = resolve(root, "stream.mp4");
+    await writeFile(mediaPath, "0123456789");
+    vi.spyOn(services.assets, "resolveContent").mockResolvedValue({
+      path: mediaPath,
+      name: "stream.mp4",
+      contentType: "video/mp4",
+    });
+    const url = `/api/v1/projects/${projectId}/assets/${createId()}/content`;
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+    const session = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${projectId}/playback-session`,
+      headers: authorization,
+      payload: {},
+    });
+    expect(session.statusCode).toBe(200);
+    const setCookie = String(session.headers["set-cookie"]);
+    expect(setCookie).toContain("HttpOnly; SameSite=Strict");
+    expect(setCookie).toContain(`Path=/api/v1/projects/${projectId}/`);
+    expect(setCookie).not.toContain(token);
+    const cookie = setCookie.split(";")[0]!;
+    for (const [range, body, contentRange] of [
+      ["bytes=2-5", "2345", "bytes 2-5/10"],
+      ["bytes=7-", "789", "bytes 7-9/10"],
+      ["bytes=-3", "789", "bytes 7-9/10"],
+      ["bytes=8-1000", "89", "bytes 8-9/10"],
+    ]) {
+      const response = await app.inject({
+        method: "GET",
+        url,
+        headers: { cookie, range: range! },
+      });
+      expect(response.statusCode).toBe(206);
+      expect(response.body).toBe(body);
+      expect(response.headers["content-range"]).toBe(contentRange);
+      expect(Number(response.headers["content-length"])).toBe(body!.length);
+    }
+    for (const range of [
+      "bytes=10-",
+      "bytes=8-4",
+      "bytes=-0",
+      "bytes=0-1,4-5",
+      "bytes=9999999999999999999-",
+    ]) {
+      const response = await app.inject({
+        method: "GET",
+        url,
+        headers: { cookie, range },
+      });
+      expect(response.statusCode).toBe(416);
+      expect(response.headers["content-range"]).toBe("bytes */10");
+    }
+    const head = await app.inject({ method: "HEAD", url, headers: { cookie } });
+    expect(head.statusCode).toBe(200);
+    expect(head.body).toBe("");
+    expect(head.headers["content-length"]).toBe("10");
+    const changed = await app.inject({
+      method: "GET",
+      url,
+      headers: { cookie, range: "bytes=2-5", "if-range": '"stale"' },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.body).toBe("0123456789");
+    for (const otherUrl of [
+      "/api/v1/projects",
+      `/api/v1/projects/${projectId}`,
+      url.replace(projectId, createId()),
+    ]) {
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: otherUrl,
+            headers: { cookie },
+          })
+        ).statusCode,
+      ).toBe(401);
+    }
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/transactions",
+          headers: { cookie },
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(401);
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 9 * 60 * 60 * 1000);
+    expect(
+      (await app.inject({ method: "GET", url, headers: { cookie } }))
+        .statusCode,
+    ).toBe(401);
+  });
+
   it("requires bearer authentication for every API resource", async () => {
     const response = await app.inject({
       method: "GET",
@@ -702,5 +806,46 @@ describe("HTTP control plane", () => {
     expect(artifact.statusCode).toBe(200);
     expect(artifact.headers["content-type"]).toContain("image/png");
     expect(artifact.body).toBe("http-preview-fixture");
+    const session = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${projectId}/playback-session`,
+      headers: authorization,
+      payload: {},
+    });
+    const cookie = String(session.headers["set-cookie"]).split(";")[0]!;
+    const scopedUrl = `/api/v1/projects/${projectId}/jobs/${jobId}/artifacts/${encodeURIComponent(artifactName!)}`;
+    const download = await app.inject({
+      method: "GET",
+      url: scopedUrl,
+      headers: { cookie, range: "bytes=0-3" },
+    });
+    expect(download.statusCode).toBe(206);
+    expect(download.body).toBe("http");
+    expect(download.headers["content-disposition"]).toContain("attachment");
+    // A media cookie cannot access another project's artifact through this
+    // project's URL, or gain access to the unscoped job endpoint.
+    expect(
+      (await app.inject({ method: "GET", url, headers: { cookie } }))
+        .statusCode,
+    ).toBe(401);
+    const other = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      headers: authorization,
+      payload: { name: "Other project" },
+    });
+    const wrongProjectUrl = scopedUrl.replace(
+      projectId,
+      other.json().data.projectId,
+    );
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: wrongProjectUrl,
+          headers: authorization,
+        })
+      ).statusCode,
+    ).toBe(404);
   });
 });

@@ -23,8 +23,8 @@ import type {
 const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 const MAX_FILE_BYTES = 2 * 1_024 * 1_024 * 1_024;
 const MAX_SEGMENTS = 120;
-const DEFAULT_INPUT_PRICE_PER_MILLION = 0.15;
-const DEFAULT_OUTPUT_PRICE_PER_MILLION = 0.6;
+const DEFAULT_INPUT_PRICE_PER_MILLION = 0.3;
+const DEFAULT_OUTPUT_PRICE_PER_MILLION = 2.5;
 const DEFAULT_INPUT_TOKENS_PER_SECOND = 283;
 
 interface GeminiConfig {
@@ -134,7 +134,7 @@ export function configuration(
     ),
     maxCostUsd: boundedNumber(
       environment.FRAMEOS_GEMINI_MAX_COST_USD_PER_ANALYSIS,
-      0.1,
+      0.5,
       0.001,
       100,
     ),
@@ -743,7 +743,7 @@ export function loadVertexGeminiAnalyzer(
           : durationMs / 1_000) *
           config.inputTokensPerSecond *
           config.inputPricePerMillion +
-                    32_768 * config.outputPricePerMillion) /
+          32_768 * config.outputPricePerMillion) /
         1_000_000;
       if (estimatedMax > config.maxCostUsd)
         throw new FrameOSError(

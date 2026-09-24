@@ -10,12 +10,13 @@ image or Compose file.
 1. Ensure Docker Desktop is running normally.
 2. Stop a Windows-host daemon on port 31415, if one is running.
 3. Run `docker compose up --build` from the repository root.
-4. Open `http://127.0.0.1:31415/inspector`.
+4. Open `http://127.0.0.1:31415/studio`.
 5. Read the token from the named volume-backed `.frameos-data/auth-token` via
    `docker compose exec frameos-daemon cat /app/.frameos-data/auth-token`.
 
-The Compose file overrides `FRAMEOS_GCLOUD_COMMAND` to `gcloud` inside Linux.
-Your host `.env` can retain its Windows path; it is not used in the container.
+The Compose file overrides `FRAMEOS_GCLOUD_COMMAND` to `gcloud` and
+`FRAMEOS_ENGINE_WORKER` to the bundled Linux native worker. Your host `.env`
+can retain its Windows paths; those paths are not used in the container.
 Because `CLOUDSDK_CONFIG=/gcloud`, the container reads the mounted local ADC
 credentials and continues to impersonate the restricted FrameOS service account.
 

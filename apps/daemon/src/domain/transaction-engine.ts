@@ -3,13 +3,16 @@ import {
   createId,
   transactionRequestSchema,
   transactionResultSchema,
-  type Operation,
   type Project,
   type TransactionRequest,
   type TransactionResult,
 } from "@frameos/contracts";
 import { executeOperations } from "./operation-executor.js";
-import type { DraftRecord, ProjectStore } from "../store/project-store.js";
+import type {
+  DraftRecord,
+  ProjectStore,
+  StoredTransactionRecord,
+} from "../store/project-store.js";
 import type { MediaPolicy } from "../security/media-policy.js";
 import type { CapabilityService } from "../services/capability-service.js";
 
@@ -217,24 +220,63 @@ export class TransactionEngine {
     projectId: string,
     idempotencyKey: string,
   ): Promise<TransactionResult> {
+    return this.navigateHistory(projectId, idempotencyKey, "undo");
+  }
+
+  public async redo(
+    projectId: string,
+    idempotencyKey: string,
+  ): Promise<TransactionResult> {
+    return this.navigateHistory(projectId, idempotencyKey, "redo");
+  }
+
+  private async navigateHistory(
+    projectId: string,
+    idempotencyKey: string,
+    direction: "undo" | "redo",
+  ): Promise<TransactionResult> {
     return this.store.withProjectLock(projectId, async () => {
+      const existing = await this.store.findIdempotentResult(
+        projectId,
+        idempotencyKey,
+      );
+      if (existing) return existing;
       const current = await this.store.load(projectId);
-      if (current.revision === 0) {
+      const history = await this.store.history(projectId);
+      const done: StoredTransactionRecord[] = [];
+      const undone: StoredTransactionRecord[] = [];
+      // Reconstruct the editing cursor from the persisted log, not revision - 1:
+      // undo/redo themselves create revisions and must never become user edits.
+      for (const record of history) {
+        const kind = record.result.changes[0]?.operationType;
+        const legacyRedo = record.request.operations.every(
+          (op) => op.provenance?.actorId === "frameos.redo",
+        );
+        if (kind === "project.undo") {
+          const previous = done.pop();
+          if (previous) undone.push(previous);
+        } else if (kind === "project.redo" || legacyRedo) {
+          const next = undone.pop();
+          if (next) done.push(next);
+        } else {
+          done.push(record);
+          undone.length = 0;
+        }
+      }
+      const target = direction === "undo" ? done.at(-1) : undone.at(-1);
+      if (!target)
         throw new FrameOSError(
           "VALIDATION_ERROR",
-          "Project has no committed transaction to undo",
+          `No edits to ${direction}`,
           422,
         );
-      }
-      const prior = await this.store.loadRevision(
-        projectId,
-        current.revision - 1,
-      );
-      const history = await this.store.history(projectId);
-      const priorRecord = history.at(-1);
-      const operations: Operation[] = priorRecord?.inverseOperations ?? [];
+      const targetRevision =
+        direction === "undo"
+          ? target.request.baseRevision
+          : target.result.resultingRevision;
+      const snapshot = await this.store.loadRevision(projectId, targetRevision);
       const restored: Project = {
-        ...structuredClone(prior),
+        ...structuredClone(snapshot),
         revision: current.revision + 1,
         updatedAt: new Date().toISOString(),
       };
@@ -243,20 +285,19 @@ export class TransactionEngine {
         baseRevision: current.revision,
         idempotencyKey,
         mode: "commit",
-        operations:
-          operations.length > 0
-            ? operations
-            : [
-                {
-                  operationId: createId(),
-                  type: "project.metadata.set",
-                  preconditions: [],
-                  provenance: { actorType: "system", actorId: "frameos.undo" },
-                  arguments: {
-                    values: { restoredFromRevision: prior.revision },
-                  },
-                },
-              ],
+        operations: [
+          {
+            operationId: createId(),
+            type: "project.metadata.set",
+            preconditions: [],
+            provenance: {
+              actorType: "system",
+              actorId: `frameos.${direction}`,
+              reason: `${direction} ${target.transactionId}`,
+            },
+            arguments: { values: { restoredFromRevision: targetRevision } },
+          },
+        ],
       });
       const result = transactionResultSchema.parse({
         transactionId: createId(),
@@ -266,61 +307,19 @@ export class TransactionEngine {
         mode: "commit",
         changes: [
           {
-            operationId: request.operations[0]?.operationId ?? createId(),
-            operationType: "project.undo",
+            operationId: request.operations[0]!.operationId,
+            operationType: `project.${direction}`,
             entityIds: [projectId],
-            summary: `Restored revision ${prior.revision}`,
+            summary: `${direction}: restored revision ${targetRevision}`,
           },
         ],
-        warnings:
-          operations.length === 0
-            ? [
-                "Undo used a revision snapshot because inverse operations were unavailable",
-              ]
-            : [],
+        warnings: [],
         unavailableCapabilities: [],
         affectedRanges: [],
         project: restored,
       });
       await this.store.commitUnsafe(restored, request, result, []);
       return result;
-    });
-  }
-
-  public async redo(
-    projectId: string,
-    idempotencyKey: string,
-  ): Promise<TransactionResult> {
-    const [current, history] = await Promise.all([
-      this.store.load(projectId),
-      this.store.history(projectId),
-    ]);
-    const undoRecord = history.at(-1);
-    const originalRecord = history.at(-2);
-    if (
-      undoRecord?.result.changes[0]?.operationType !== "project.undo" ||
-      originalRecord === undefined
-    ) {
-      throw new FrameOSError(
-        "VALIDATION_ERROR",
-        "The latest revision is not an undo that can be redone",
-        422,
-      );
-    }
-    return this.execute({
-      projectId,
-      baseRevision: current.revision,
-      idempotencyKey,
-      mode: "commit",
-      operations: originalRecord.request.operations.map((operation) => ({
-        ...structuredClone(operation),
-        operationId: createId(),
-        provenance: {
-          actorType: "system",
-          actorId: "frameos.redo",
-          reason: `Redo ${originalRecord.transactionId}`,
-        },
-      })),
     });
   }
 }

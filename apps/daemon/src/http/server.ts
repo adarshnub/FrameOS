@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { sendMediaFile } from "./media-stream.js";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
@@ -116,6 +117,7 @@ function studioSession(password: string, issuedAt: number): string {
 function studioSessionMatches(
   cookie: string | undefined,
   password: string | undefined,
+  ttlMs = studioSessionTtlMs,
 ): boolean {
   if (!cookie || !password) return false;
   const [payload, supplied] = cookie.split(".");
@@ -123,7 +125,7 @@ function studioSessionMatches(
   const issuedAt = Number.parseInt(payload, 36);
   if (
     !Number.isFinite(issuedAt) ||
-    Date.now() - issuedAt > studioSessionTtlMs ||
+    Date.now() - issuedAt > ttlMs ||
     issuedAt > Date.now() + 60_000
   )
     return false;
@@ -174,6 +176,7 @@ function requestAuthorization(request: {
 }
 
 function requiredScope(url: string, method: string): BearerTokenScope {
+  if (url.endsWith("/playback-session")) return "project:read";
   if (url.startsWith("/api/v1/admin")) return "admin";
   if (url.startsWith("/mcp")) return "mcp";
   if (url.startsWith("/api/v1/exports/")) return "project:read";
@@ -195,7 +198,9 @@ function requiredScope(url: string, method: string): BearerTokenScope {
   ) {
     return "render:write";
   }
-  return method === "GET" ? "project:read" : "project:write";
+  return method === "GET" || method === "HEAD"
+    ? "project:read"
+    : "project:write";
 }
 
 function authorize(
@@ -257,6 +262,7 @@ export async function buildHttpServer(
             level: process.env.FRAMEOS_LOG_LEVEL ?? "info",
             redact: [
               "req.headers.authorization",
+              "req.headers.cookie",
               "req.headers.sec-websocket-protocol",
             ],
           },
@@ -276,6 +282,10 @@ export async function buildHttpServer(
   });
 
   const requestStartedAt = new WeakMap<object, bigint>();
+  // Media elements cannot send bearer headers. This cookie grants only asset
+  // playback for one project; it never authorizes edits or other API reads.
+  const playbackSecret = randomBytes(32).toString("base64url");
+  const playbackTtlMs = 8 * 60 * 60 * 1000;
 
   app.addHook("onRequest", async (request, reply) => {
     requestStartedAt.set(request, process.hrtime.bigint());
@@ -294,6 +304,20 @@ export async function buildHttpServer(
       }
     }
     if (!isProtectedPath(request.url)) return;
+    const playbackPath =
+      /^\/api\/v1\/projects\/([0-9a-f-]{36})(?:\/assets\/[0-9a-f-]{36}\/content|\/jobs\/[0-9a-f-]{36}\/artifacts\/[a-zA-Z0-9._-]+)$/u.exec(
+        request.url.split("?")[0]!,
+      );
+    if (
+      (request.method === "GET" || request.method === "HEAD") &&
+      playbackPath &&
+      studioSessionMatches(
+        cookieValue(request, "frameos_playback"),
+        playbackSecret + playbackPath[1],
+        playbackTtlMs,
+      )
+    )
+      return;
     const header = requestAuthorization(request);
     const grant =
       services.config.studioPassword &&
@@ -436,7 +460,7 @@ export async function buildHttpServer(
     void reply
       .header(
         "content-security-policy",
-        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src data: blob:; media-src blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
       )
       .type("text/html; charset=utf-8");
     return studioHtml;
@@ -750,8 +774,28 @@ export async function buildHttpServer(
     return successEnvelope(asset, { revision: project.revision });
   });
 
+  app.post(
+    "/api/v1/projects/:projectId/playback-session",
+    async (request, reply) => {
+      const { projectId } = projectParamsSchema.parse(request.params);
+      await services.projects.load(projectId);
+      const secure =
+        services.config.remoteMode ||
+        services.config.studioPassword ||
+        request.protocol === "https";
+      reply
+        .header("Cache-Control", "no-store")
+        .header(
+          "set-cookie",
+          `frameos_playback=${studioSession(playbackSecret + projectId, Date.now())}; Path=/api/v1/projects/${projectId}/; Max-Age=${playbackTtlMs / 1000}; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`,
+        );
+      return successEnvelope({ expiresInSeconds: playbackTtlMs / 1000 });
+    },
+  );
+
   app.get(
     "/api/v1/projects/:projectId/assets/:assetId/content",
+    { config: { rateLimit: false } },
     async (request, reply) => {
       const params = projectParamsSchema
         .extend({ assetId: z.string().uuid() })
@@ -768,7 +812,7 @@ export async function buildHttpServer(
           `inline; filename="${basename(media.name).replaceAll('"', "")}"`,
         )
         .type(media.contentType);
-      return reply.send(createReadStream(media.path));
+      return sendMediaFile(request, reply, media.path);
     },
   );
 
@@ -1341,6 +1385,34 @@ export async function buildHttpServer(
     const { jobId } = jobParamsSchema.parse(request.params);
     return successEnvelope(services.jobs.getJob(jobId));
   });
+
+  app.get(
+    "/api/v1/projects/:projectId/jobs/:jobId/artifacts/:artifactName",
+    { config: { rateLimit: false } },
+    async (request, reply) => {
+      const { projectId, jobId, artifactName } = z
+        .object({
+          projectId: z.uuid(),
+          jobId: z.uuid(),
+          artifactName: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,254}$/u),
+        })
+        .parse(request.params);
+      const job = services.jobs.getJob(jobId);
+      if (job.projectId !== projectId)
+        throw new FrameOSError(
+          "NOT_FOUND",
+          "Artifact does not belong to this project",
+          404,
+        );
+      const artifact = await services.jobs.resolveArtifact(jobId, artifactName);
+      reply
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Content-Security-Policy", "sandbox; default-src 'none'")
+        .header("Content-Disposition", `attachment; filename="${artifactName}"`)
+        .type(artifact.mimeType);
+      return sendMediaFile(request, reply, artifact.path);
+    },
+  );
 
   app.get(
     "/api/v1/jobs/:jobId/artifacts/:artifactName",

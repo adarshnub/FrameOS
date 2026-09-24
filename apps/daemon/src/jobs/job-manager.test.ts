@@ -49,6 +49,49 @@ describe("preview artifacts", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("queues renders and cancels a waiting job without starting it or overtaking the active export", async () => {
+    const project = await services.projects.create(
+      createProject({ name: "Render queue" }),
+    );
+    const gate = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    const render = vi
+      .spyOn(services.worker, "render")
+      .mockImplementation(async (_xml, output) => {
+        started.resolve();
+        await gate.promise;
+        await writeFile(output, "render-fixture");
+        return '{"status":"completed"}';
+      });
+    try {
+      const first = await services.jobs.startRender({
+        projectId: project.projectId,
+        outputName: "first.mp4",
+      });
+      await started.promise;
+      const second = await services.jobs.startRender({
+        projectId: project.projectId,
+        outputName: "second.mp4",
+      });
+      const third = await services.jobs.startRender({
+        projectId: project.projectId,
+        outputName: "third.mp4",
+      });
+      expect(services.jobs.getJob(second.id).status).toBe("queued");
+      services.jobs.cancel(second.id);
+      await waitForJob(services, second.id);
+      expect(services.jobs.getJob(third.id).status).toBe("queued");
+      expect(render).toHaveBeenCalledTimes(1);
+      gate.resolve();
+      expect((await waitForJob(services, first.id)).status).toBe("completed");
+      expect((await waitForJob(services, third.id)).status).toBe("completed");
+      expect(render).toHaveBeenCalledTimes(2);
+      expect(services.jobs.getJob(second.id).status).toBe("cancelled");
+    } finally {
+      gate.resolve();
+    }
+  });
+
   it("renders an exact frame and exposes only authenticated artifact references", async () => {
     const project = await services.projects.create(
       createProject({ name: "Frame preview" }),

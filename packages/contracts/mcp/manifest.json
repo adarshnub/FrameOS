@@ -129,6 +129,7 @@
     "gap.add",
     "gap.remove",
     "item.add",
+    "item.automation.set",
     "item.delete",
     "item.replace",
     "item.transform.set",

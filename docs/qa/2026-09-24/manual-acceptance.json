@@ -1,0 +1,68 @@
+{
+  "startedAt": "2026-09-24T03:13:04.310Z",
+  "scope": "10 video clips x 300 seconds, 1920x1080",
+  "checks": [
+    "native renderer available",
+    "ten five-minute 1080p sources imported and probed",
+    "atomic assembly of a fifty-minute timeline",
+    "split, audio gain, repeated undo and redo",
+    "invalid overlap leaves the project unchanged",
+    "rendered split preserves the requested -9 dB audio change",
+    "native 1080p cut previews across all fifty minutes",
+    "complete fifty-minute 1080p export with audio"
+  ],
+  "renders": [
+    {
+      "kind": "region",
+      "at": 0,
+      "path": "/qa/store/jobs/01a0d167-2270-713f-a75b-29b80b512548/preview-region-0-59.mp4",
+      "duration": 2.006
+    },
+    {
+      "kind": "region",
+      "at": 149,
+      "path": "/qa/store/jobs/01a0d167-3017-758b-bc8b-fcb80f1f0b65/preview-region-4470-4529.mp4",
+      "duration": 2.006
+    },
+    {
+      "kind": "region",
+      "at": 299,
+      "path": "/qa/store/jobs/01a0d167-3e7c-75f0-b322-7e09668f4174/preview-region-8970-9029.mp4",
+      "duration": 2.006
+    },
+    {
+      "kind": "region",
+      "at": 599,
+      "path": "/qa/store/jobs/01a0d167-4c4a-732e-8e6a-f62c0a487804/preview-region-17970-18029.mp4",
+      "duration": 2.006
+    },
+    {
+      "kind": "region",
+      "at": 1499,
+      "path": "/qa/store/jobs/01a0d167-5a25-75ea-8ee7-5fe95920cc34/preview-region-44970-45029.mp4",
+      "duration": 2.006
+    },
+    {
+      "kind": "region",
+      "at": 2699,
+      "path": "/qa/store/jobs/01a0d167-67cc-7365-b457-7cfbeee7b3b4/preview-region-80970-81029.mp4",
+      "duration": 2.006
+    },
+    {
+      "kind": "region",
+      "at": 2998,
+      "path": "/qa/store/jobs/01a0d167-7588-715b-be56-26b8ee3232ef/preview-region-89940-89999.mp4",
+      "duration": 2.006
+    },
+    {
+      "kind": "full",
+      "path": "/qa/store/jobs/01a0d167-8336-71ab-9a00-c56fee19c273/manual-50-minute-1080p.mp4",
+      "duration": 3000,
+      "videoCodec": "h264",
+      "audioCodec": "aac"
+    }
+  ],
+  "projectId": "01a0d167-03f6-771e-9345-653d9e9480f3",
+  "status": "passed",
+  "completedAt": "2026-09-24T03:21:46.542Z"
+}

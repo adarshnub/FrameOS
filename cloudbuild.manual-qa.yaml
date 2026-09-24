@@ -1,0 +1,66 @@
+# Isolated acceptance build: generated media only; never deploys the live app.
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
+    args: [build, -t, "${_IMAGE}:qa-$BUILD_ID", .]
+  - id: manual
+    name: gcr.io/cloud-builders/docker
+    allowFailure: true
+    args:
+      - run
+      - --rm
+      - --cpus=6
+      - --memory=6g
+      - --entrypoint=node
+      - -e
+      - NODE_ENV=test
+      - -e
+      - FRAMEOS_QA_DIR=/qa
+      - -v
+      - /workspace/tools:/app/tools:ro
+      - -v
+      - /workspace/qa-output:/qa
+      - "${_IMAGE}:qa-$BUILD_ID"
+      - tools/manual-editing-qa.mjs
+      - --long-render
+  - id: compositing
+    name: gcr.io/cloud-builders/docker
+    allowFailure: true
+    args:
+      - run
+      - --rm
+      - --cpus=6
+      - --memory=6g
+      - --entrypoint=node
+      - -e
+      - FRAMEOS_QA_DIR=/qa
+      - -v
+      - /workspace/tools:/app/tools:ro
+      - -v
+      - /workspace/qa-output:/qa
+      - "${_IMAGE}:qa-$BUILD_ID"
+      - tools/compositing-qa.mjs
+  - id: collect
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        gsutil -m cp -r /workspace/qa-output gs://${_BUCKET}/manual-qa/$BUILD_ID/
+        python3 - <<'PY'
+        import json
+        from pathlib import Path
+        for name in ['manual-acceptance.json', 'compositing/report.json']:
+            report = json.loads((Path('/workspace/qa-output') / name).read_text())
+            assert report['status'] == 'passed', report
+        PY
+images: ["${_IMAGE}:qa-$BUILD_ID"]
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/gen-lang-client-0644821693/frameos/frameos-daemon
+  _BUCKET: frameos-media-0644821693
+timeout: 7200s
+options:
+  machineType: E2_HIGHCPU_8
+  diskSizeGb: 100
+  logging: CLOUD_LOGGING_ONLY

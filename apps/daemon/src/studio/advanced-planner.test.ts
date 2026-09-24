@@ -5,6 +5,8 @@ import {
   createId,
   frameTime,
   operationCatalog,
+  titleSchema,
+  toSeconds,
   type CapabilityDescriptor,
 } from "@frameos/contracts";
 import { createProject } from "../domain/project-factory.js";
@@ -80,6 +82,32 @@ function fixture() {
 }
 
 describe("advanced capability routing and planning", () => {
+  it.each([24, 30, 60])("inserts ten seconds of %s fps source and a title from 3–7 seconds without a reference", (fps) => {
+    const f = fixture();
+    f.track.items = [];
+    f.project.assets[f.clip.assetId]!.duration = frameTime(20 * fps, { numerator: fps, denominator: 1 });
+    const seconds = (value: number) => frameTime(value, { numerator: 1, denominator: 1 });
+    const range = { start: seconds(0), duration: seconds(10) };
+    const titleTrack = { ...f.track, id: createId(), name: "Titles", order: 2, items: [] };
+    f.project.sequences[f.op.arguments.sequenceId]!.tracks.unshift(titleTrack);
+    const title = titleSchema.parse({
+      id: createId(), name: "Welcome", type: "title", text: "welcome to frameos",
+      timelineRange: { start: frameTime(90, { numerator: 30, denominator: 1 }), duration: frameTime(120, { numerator: 30, denominator: 1 }) },
+    });
+    const add = (item: unknown, trackId = f.track.id) => ({ operationId: createId(), type: "item.add", arguments: { sequenceId: f.op.arguments.sequenceId, trackId, item } });
+    const result = validateAdvancedSteps(f.project, [
+      { label: "Keep first ten seconds", operation: add({ ...f.clip, timelineRange: range, sourceRange: range }) },
+      { label: "Welcome from 3 to 7", operation: add(title, titleTrack.id) },
+    ], new Set(["item.add"]), f.request);
+    const items = result.draft.sequences[f.op.arguments.sequenceId]!.tracks.find(t => t.id === f.track.id)!.items;
+    expect(items).toHaveLength(1);
+    expect(toSeconds(items[0]!.timelineRange.duration)).toBe(10);
+    expect(items[0]!.type === "clip" && items[0]!.sourceRange.duration.rate.numerator).toBe(fps);
+    const caption = result.draft.sequences[f.op.arguments.sequenceId]!.tracks.find(t => t.id === titleTrack.id)!.items[0]!;
+    expect(toSeconds(caption.timelineRange.start)).toBe(3);
+    expect(toSeconds(caption.timelineRange.duration)).toBe(4);
+    expect(f.track.items).toHaveLength(0);
+  });
   it("routes installed canonical operations and excludes side effects and missing render adapters", () => {
     const { capabilities } = fixture();
     const names = routeOperations(capabilities).map((o) => o.name);

@@ -280,6 +280,74 @@ describe("transaction engine", () => {
     });
   });
 
+  it("supports repeated persisted undo/redo, idempotent retries and a new editing branch", async () => {
+    const project = await store.create(
+      createProject({ name: "History cursor" }),
+    );
+    for (let n = 1; n <= 3; n++) {
+      await engine.execute({
+        projectId: project.projectId,
+        baseRevision: n - 1,
+        idempotencyKey: `history-edit-${n}`,
+        mode: "commit",
+        operations: [
+          {
+            operationId: createId(),
+            type: "project.metadata.set",
+            preconditions: [],
+            arguments: { values: { take: n } },
+          },
+        ],
+      });
+    }
+    for (let n = 3; n >= 1; n--) {
+      const result = await engine.undo(project.projectId, `history-undo-${n}`);
+      expect(result.project).toMatchObject({
+        metadata: n === 1 ? {} : { take: n - 1 },
+      });
+      expect(await engine.undo(project.projectId, `history-undo-${n}`)).toEqual(
+        result,
+      );
+    }
+    await expect(
+      engine.undo(project.projectId, "empty-undo"),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    for (let n = 1; n <= 3; n++) {
+      const result = await engine.redo(project.projectId, `history-redo-${n}`);
+      expect(result.project).toMatchObject({ metadata: { take: n } });
+      expect(await engine.redo(project.projectId, `history-redo-${n}`)).toEqual(
+        result,
+      );
+    }
+    await expect(
+      engine.redo(project.projectId, "empty-redo"),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    const undone = await engine.undo(project.projectId, "undo-before-branch");
+    await engine.execute({
+      projectId: project.projectId,
+      baseRevision: undone.resultingRevision,
+      idempotencyKey: "history-branch",
+      mode: "commit",
+      operations: [
+        {
+          operationId: createId(),
+          type: "project.metadata.set",
+          preconditions: [],
+          arguments: { values: { take: 99 } },
+        },
+      ],
+    });
+    await expect(
+      engine.redo(project.projectId, "redo-old-branch"),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(
+      (await engine.undo(project.projectId, "undo-branch")).project,
+    ).toMatchObject({ metadata: { take: 2 } });
+    expect(
+      (await engine.undo(project.projectId, "undo-second")).project,
+    ).toMatchObject({ metadata: { take: 1 } });
+  });
+
   it("finishes a transaction interrupted after its revision snapshot was written", async () => {
     const project = await store.create(createProject({ name: "Recovery" }));
     await engine.execute({

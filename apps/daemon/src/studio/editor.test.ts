@@ -17,6 +17,137 @@ function editorModel() {
 }
 
 describe("visual Studio", () => {
+  it("continues a batch import after a bad file and keeps saved assets when preview fails", async () => {
+    const elements = {
+      files: {
+        files: [1, 2, 3].map((n) => ({
+          name: `clip-${n}.mp4`,
+          type: "video/mp4",
+        })),
+        value: "selected",
+      },
+      "save-state": { textContent: "" },
+    };
+    const requests: string[] = [];
+    const context = createContext({
+      sessionStorage: { getItem: () => "" },
+      crypto: { randomUUID },
+      document: { getElementById: (id: keyof typeof elements) => elements[id] },
+      FormData: class {
+        append() {}
+      },
+      fetch: async (url: string) => {
+        requests.push(url);
+        if (requests.length === 2)
+          return {
+            ok: false,
+            json: async () => ({ error: { message: "Invalid source" } }),
+          };
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              asset: { id: `asset-${requests.length}` },
+              transaction: {
+                project: {
+                  projectId: "p",
+                  revision: requests.length === 1 ? 1 : 2,
+                },
+              },
+            },
+          }),
+        };
+      },
+    });
+    new Script(
+      studioJavaScript.slice(0, studioJavaScript.indexOf("let pointer=null;")),
+    ).runInContext(context);
+    new Script(
+      studioJavaScript.slice(
+        studioJavaScript.indexOf("async function importFiles(){"),
+        studioJavaScript.indexOf("function renderReference()"),
+      ),
+    ).runInContext(context);
+    new Script(
+      "state.project={projectId:'p',revision:0};pause=()=>{};applyProjectSnapshot=p=>state.project=p;renderMedia=()=>{};updateHead=()=>{};mediaDuration=async()=>300;showFrame=async()=>{throw Error('Unsupported browser codec');};toast=message=>state.message=message;",
+    ).runInContext(context);
+    await new Script("importFiles()").runInContext(context);
+    expect(requests).toHaveLength(3);
+    expect(requests[2]).toContain("baseRevision=1");
+    expect(new Script("state.project.revision").runInContext(context)).toBe(2);
+    expect(new Script("[...state.checked]").runInContext(context)).toEqual([
+      "asset-1",
+      "asset-3",
+    ]);
+    expect(new Script("state.message").runInContext(context)).toContain(
+      "2 file(s) imported.",
+    );
+    expect(new Script("state.message").runInContext(context)).toContain(
+      "Unsupported browser codec",
+    );
+    expect(new Script("state.busy").runInContext(context)).toBe(false);
+    expect(elements.files.value).toBe("");
+  });
+  it("fits a fifty-minute timeline and keeps the ruler bounded", () => {
+    const run = editorModel();
+    const zoom = run("fitZoom(1100,3000)") as number;
+    expect(zoom * 3000).toBeLessThan(1000);
+    expect(run(`3000/rulerStep(${zoom})`)).toBeLessThan(25);
+  });
+
+  it("ends at enabled content including captions", () => {
+    const run = editorModel();
+    run(
+      "state.project={settings:{defaultSequenceId:'s'},sequences:{s:{format:{frameRate:{numerator:30,denominator:1}},tracks:[{enabled:true,items:[{enabled:true,timelineRange:range(0,3000)},{enabled:false,timelineRange:range(3000,3000)}]}],captions:[{enabled:true,cues:[{range:range(3000,2)}]}]}}}",
+    );
+    expect(run("duration()")).toBe(3002);
+    expect(
+      run("state.project.sequences.s.captions[0].enabled=false;duration()"),
+    ).toBe(3000);
+  });
+
+  it("shares a streaming session without downloading whole media files", async () => {
+    const calls: unknown[] = [];
+    const context = createContext({
+      sessionStorage: { getItem: () => "" },
+      crypto: { randomUUID },
+      fetch: async (...args: unknown[]) => {
+        calls.push(args);
+        return {
+          ok: true,
+          json: async () => ({ data: { expiresInSeconds: 28800 } }),
+        };
+      },
+    });
+    new Script(
+      studioJavaScript.slice(0, studioJavaScript.indexOf("let pointer=null;")),
+    ).runInContext(context);
+    const result = await new Script(
+      "state.project={projectId:'p'};Promise.all(Array.from({length:10},(_,i)=>mediaUrl({id:'asset-'+i})))",
+    ).runInContext(context);
+    expect(calls).toHaveLength(1);
+    expect(result).toHaveLength(10);
+    expect(result[9]).toBe("/api/v1/projects/p/assets/asset-9/content");
+  });
+  it("previews caption cues only within their active range", () => {
+    const run = editorModel();
+    run(
+      `state.project={settings:{defaultSequenceId:'s'},sequences:{s:{tracks:[],captions:[{enabled:true,cues:[{text:'welcome to frameos',range:{start:{value:90,rate:{numerator:30,denominator:1}},duration:{value:120,rate:{numerator:30,denominator:1}}}}]}]}}}`,
+    );
+    for (const [at, expected] of [
+      [2.9, ""],
+      [3, "welcome to frameos"],
+      [5, "welcome to frameos"],
+      [7, ""],
+    ] as const) {
+      expect(run(`state.playhead=${at};overlayText()`)).toBe(expected);
+    }
+    expect(
+      run(
+        "state.project.sequences.s.captions[0].enabled=false;state.playhead=5;overlayText()",
+      ),
+    ).toBe("");
+  });
   it("ships valid browser JavaScript and unique DOM IDs", () => {
     expect(() => new Script(studioJavaScript)).not.toThrow();
     const ids = [...studioHtml.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);

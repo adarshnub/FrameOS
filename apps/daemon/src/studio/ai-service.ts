@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { setTimeout as delay } from "node:timers/promises";
 import { createId, FrameOSError, toSeconds } from "@frameos/contracts";
 import {
   AccessTokenProvider,
@@ -56,6 +57,18 @@ export function vertexSchema(
   return result;
 }
 const responseSchema = vertexSchema(z.toJSONSchema(aiPlanSchema));
+export function editorTimeoutMs(
+  environment: NodeJS.ProcessEnv = process.env,
+): number {
+  const value = Number(environment.FRAMEOS_GEMINI_EDITOR_TIMEOUT_MS ?? 600_000);
+  if (!Number.isInteger(value) || value < 30_000 || value > 1_200_000)
+    throw new FrameOSError(
+      "VALIDATION_ERROR",
+      "FRAMEOS_GEMINI_EDITOR_TIMEOUT_MS must be between 30000 and 1200000",
+      422,
+    );
+  return value;
+}
 export function vertexEditGenerator(
   environment: NodeJS.ProcessEnv,
 ): GenerateEdit {
@@ -119,25 +132,21 @@ export function vertexEditGenerator(
       }),
     };
     let response = await fetch(requestUrl, requestInit);
-    // Vertex may return a transient 429 while the analysis requests that
-    // precede planning are still settling. Honor Retry-After once so a user
-    // does not have to reconstruct the entire reference workflow.
-    if (response.status === 429) {
-      const retryAfter = Number(response.headers.get("retry-after"));
-      const delayMs = Number.isFinite(retryAfter)
-        ? Math.min(30_000, Math.max(1_000, retryAfter * 1_000))
+    // One bounded retry for temporary capacity errors, sharing the original
+    // deadline. timers/promises removes its abort listener on completion.
+    if (response.status === 429 || response.status === 503) {
+      const header = response.headers.get("retry-after");
+      const retryAfter = header === null ? NaN : Number(header);
+      const requestedDelay = Number.isFinite(retryAfter)
+        ? retryAfter * 1_000
+        : header
+          ? Date.parse(header) - Date.now()
+          : NaN;
+      const delayMs = Number.isFinite(requestedDelay)
+        ? Math.min(30_000, Math.max(1_000, requestedDelay))
         : 10_000;
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, delayMs);
-        signal.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(timer);
-            reject(signal.reason);
-          },
-          { once: true },
-        );
-      });
+      await response.body?.cancel();
+      await delay(delayMs, undefined, { signal });
       response = await fetch(requestUrl, requestInit);
     }
     if (!response.ok)
@@ -214,7 +223,7 @@ export class StudioAiService {
   ) {}
   public async plan(
     request: AiPlanRequest,
-    signal: AbortSignal = AbortSignal.timeout(120000),
+    signal: AbortSignal = AbortSignal.timeout(editorTimeoutMs()),
     visualReview?: Pick<VisualReviewRequest, "frames" | "pendingEdits">,
   ) {
     if (this.active.has(request.projectId))

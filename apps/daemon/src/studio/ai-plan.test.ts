@@ -229,6 +229,7 @@ describe("AI independent sound and retiming", () => {
         "mlt.filter.avfilter.acompressor",
         "mlt.filter.avfilter.alimiter",
         "mlt.filter.avfilter.loudnorm",
+        "mlt.transition.mix",
       ]),
     });
     expect(xml).toContain("pow(10,(-12*");

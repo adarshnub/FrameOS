@@ -2423,6 +2423,118 @@
                                   ],
                                   "additionalProperties": false
                                 },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "timeMap": {
                                   "default": [],
                                   "type": "array",
@@ -3522,6 +3634,118 @@
                                   ],
                                   "additionalProperties": false
                                 },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "effects": {
                                   "default": [],
                                   "type": "array",
@@ -4041,6 +4265,118 @@
                                     "blendMode"
                                   ],
                                   "additionalProperties": false
+                                },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
                                 },
                                 "effects": {
                                   "default": [],
@@ -6676,6 +7012,118 @@
                                   ],
                                   "additionalProperties": false
                                 },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "timeMap": {
                                   "default": [],
                                   "type": "array",
@@ -7775,6 +8223,118 @@
                                   ],
                                   "additionalProperties": false
                                 },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "effects": {
                                   "default": [],
                                   "type": "array",
@@ -8294,6 +8854,118 @@
                                     "blendMode"
                                   ],
                                   "additionalProperties": false
+                                },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
                                 },
                                 "effects": {
                                   "default": [],
@@ -10629,6 +11301,118 @@
                                   ],
                                   "additionalProperties": false
                                 },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "timeMap": {
                                   "default": [],
                                   "type": "array",
@@ -11728,6 +12512,118 @@
                                   ],
                                   "additionalProperties": false
                                 },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "effects": {
                                   "default": [],
                                   "type": "array",
@@ -12247,6 +13143,118 @@
                                     "blendMode"
                                   ],
                                   "additionalProperties": false
+                                },
+                                "automationCurves": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "parameter": {
+                                        "type": "string",
+                                        "enum": [
+                                          "transform.positionX",
+                                          "transform.positionY",
+                                          "transform.anchorX",
+                                          "transform.anchorY",
+                                          "transform.scaleX",
+                                          "transform.scaleY",
+                                          "transform.rotation",
+                                          "transform.opacity",
+                                          "transform.cropTop",
+                                          "transform.cropRight",
+                                          "transform.cropBottom",
+                                          "transform.cropLeft"
+                                        ]
+                                      },
+                                      "keyframes": {
+                                        "minItems": 1,
+                                        "maxItems": 100000,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "format": "uuid",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                            },
+                                            "time": {
+                                              "type": "object",
+                                              "properties": {
+                                                "value": {
+                                                  "type": "integer",
+                                                  "minimum": 0,
+                                                  "maximum": 9007199254740991
+                                                },
+                                                "rate": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "numerator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    },
+                                                    "denominator": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 1000000
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "rate"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            },
+                                            "interpolation": {
+                                              "default": "linear",
+                                              "type": "string",
+                                              "enum": [
+                                                "hold",
+                                                "linear",
+                                                "bezier",
+                                                "smooth"
+                                              ]
+                                            },
+                                            "inTangent": {
+                                              "type": "number"
+                                            },
+                                            "outTangent": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "time",
+                                            "value",
+                                            "interpolation"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "parameter",
+                                      "keyframes"
+                                    ],
+                                    "additionalProperties": false
+                                  }
                                 },
                                 "effects": {
                                   "default": [],
@@ -14435,6 +15443,118 @@
                   ],
                   "additionalProperties": false
                 },
+                "automationCurves": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "parameter": {
+                        "type": "string",
+                        "enum": [
+                          "transform.positionX",
+                          "transform.positionY",
+                          "transform.anchorX",
+                          "transform.anchorY",
+                          "transform.scaleX",
+                          "transform.scaleY",
+                          "transform.rotation",
+                          "transform.opacity",
+                          "transform.cropTop",
+                          "transform.cropRight",
+                          "transform.cropBottom",
+                          "transform.cropLeft"
+                        ]
+                      },
+                      "keyframes": {
+                        "minItems": 1,
+                        "maxItems": 100000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "rate": {
+                                  "type": "object",
+                                  "properties": {
+                                    "numerator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "denominator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "rate"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "interpolation": {
+                              "default": "linear",
+                              "type": "string",
+                              "enum": [
+                                "hold",
+                                "linear",
+                                "bezier",
+                                "smooth"
+                              ]
+                            },
+                            "inTangent": {
+                              "type": "number"
+                            },
+                            "outTangent": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "time",
+                            "value",
+                            "interpolation"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parameter",
+                      "keyframes"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
                 "effects": {
                   "default": [],
                   "type": "array",
@@ -15430,6 +16550,118 @@
                               "blendMode"
                             ],
                             "additionalProperties": false
+                          },
+                          "automationCurves": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "parameter": {
+                                  "type": "string",
+                                  "enum": [
+                                    "transform.positionX",
+                                    "transform.positionY",
+                                    "transform.anchorX",
+                                    "transform.anchorY",
+                                    "transform.scaleX",
+                                    "transform.scaleY",
+                                    "transform.rotation",
+                                    "transform.opacity",
+                                    "transform.cropTop",
+                                    "transform.cropRight",
+                                    "transform.cropBottom",
+                                    "transform.cropLeft"
+                                  ]
+                                },
+                                "keyframes": {
+                                  "minItems": 1,
+                                  "maxItems": 100000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "time": {
+                                        "type": "object",
+                                        "properties": {
+                                          "value": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "rate": {
+                                            "type": "object",
+                                            "properties": {
+                                              "numerator": {
+                                                "type": "integer",
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 1000000
+                                              },
+                                              "denominator": {
+                                                "type": "integer",
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 1000000
+                                              }
+                                            },
+                                            "required": [
+                                              "numerator",
+                                              "denominator"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "rate"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "interpolation": {
+                                        "default": "linear",
+                                        "type": "string",
+                                        "enum": [
+                                          "hold",
+                                          "linear",
+                                          "bezier",
+                                          "smooth"
+                                        ]
+                                      },
+                                      "inTangent": {
+                                        "type": "number"
+                                      },
+                                      "outTangent": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "time",
+                                      "value",
+                                      "interpolation"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "parameter",
+                                "keyframes"
+                              ],
+                              "additionalProperties": false
+                            }
                           },
                           "timeMap": {
                             "default": [],
@@ -16530,6 +17762,118 @@
                             ],
                             "additionalProperties": false
                           },
+                          "automationCurves": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "parameter": {
+                                  "type": "string",
+                                  "enum": [
+                                    "transform.positionX",
+                                    "transform.positionY",
+                                    "transform.anchorX",
+                                    "transform.anchorY",
+                                    "transform.scaleX",
+                                    "transform.scaleY",
+                                    "transform.rotation",
+                                    "transform.opacity",
+                                    "transform.cropTop",
+                                    "transform.cropRight",
+                                    "transform.cropBottom",
+                                    "transform.cropLeft"
+                                  ]
+                                },
+                                "keyframes": {
+                                  "minItems": 1,
+                                  "maxItems": 100000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "time": {
+                                        "type": "object",
+                                        "properties": {
+                                          "value": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "rate": {
+                                            "type": "object",
+                                            "properties": {
+                                              "numerator": {
+                                                "type": "integer",
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 1000000
+                                              },
+                                              "denominator": {
+                                                "type": "integer",
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 1000000
+                                              }
+                                            },
+                                            "required": [
+                                              "numerator",
+                                              "denominator"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "rate"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "interpolation": {
+                                        "default": "linear",
+                                        "type": "string",
+                                        "enum": [
+                                          "hold",
+                                          "linear",
+                                          "bezier",
+                                          "smooth"
+                                        ]
+                                      },
+                                      "inTangent": {
+                                        "type": "number"
+                                      },
+                                      "outTangent": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "time",
+                                      "value",
+                                      "interpolation"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "parameter",
+                                "keyframes"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "effects": {
                             "default": [],
                             "type": "array",
@@ -17049,6 +18393,118 @@
                               "blendMode"
                             ],
                             "additionalProperties": false
+                          },
+                          "automationCurves": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "parameter": {
+                                  "type": "string",
+                                  "enum": [
+                                    "transform.positionX",
+                                    "transform.positionY",
+                                    "transform.anchorX",
+                                    "transform.anchorY",
+                                    "transform.scaleX",
+                                    "transform.scaleY",
+                                    "transform.rotation",
+                                    "transform.opacity",
+                                    "transform.cropTop",
+                                    "transform.cropRight",
+                                    "transform.cropBottom",
+                                    "transform.cropLeft"
+                                  ]
+                                },
+                                "keyframes": {
+                                  "minItems": 1,
+                                  "maxItems": 100000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "time": {
+                                        "type": "object",
+                                        "properties": {
+                                          "value": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "rate": {
+                                            "type": "object",
+                                            "properties": {
+                                              "numerator": {
+                                                "type": "integer",
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 1000000
+                                              },
+                                              "denominator": {
+                                                "type": "integer",
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 1000000
+                                              }
+                                            },
+                                            "required": [
+                                              "numerator",
+                                              "denominator"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "rate"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "interpolation": {
+                                        "default": "linear",
+                                        "type": "string",
+                                        "enum": [
+                                          "hold",
+                                          "linear",
+                                          "bezier",
+                                          "smooth"
+                                        ]
+                                      },
+                                      "inTangent": {
+                                        "type": "number"
+                                      },
+                                      "outTangent": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "time",
+                                      "value",
+                                      "interpolation"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "parameter",
+                                "keyframes"
+                              ],
+                              "additionalProperties": false
+                            }
                           },
                           "effects": {
                             "default": [],
@@ -18658,6 +20114,118 @@
                         ],
                         "additionalProperties": false
                       },
+                      "automationCurves": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "parameter": {
+                              "type": "string",
+                              "enum": [
+                                "transform.positionX",
+                                "transform.positionY",
+                                "transform.anchorX",
+                                "transform.anchorY",
+                                "transform.scaleX",
+                                "transform.scaleY",
+                                "transform.rotation",
+                                "transform.opacity",
+                                "transform.cropTop",
+                                "transform.cropRight",
+                                "transform.cropBottom",
+                                "transform.cropLeft"
+                              ]
+                            },
+                            "keyframes": {
+                              "minItems": 1,
+                              "maxItems": 100000,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "time": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "rate": {
+                                        "type": "object",
+                                        "properties": {
+                                          "numerator": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "denominator": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": [
+                                          "numerator",
+                                          "denominator"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "rate"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "interpolation": {
+                                    "default": "linear",
+                                    "type": "string",
+                                    "enum": [
+                                      "hold",
+                                      "linear",
+                                      "bezier",
+                                      "smooth"
+                                    ]
+                                  },
+                                  "inTangent": {
+                                    "type": "number"
+                                  },
+                                  "outTangent": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "time",
+                                  "value",
+                                  "interpolation"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "parameter",
+                            "keyframes"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "timeMap": {
                         "default": [],
                         "type": "array",
@@ -19757,6 +21325,118 @@
                         ],
                         "additionalProperties": false
                       },
+                      "automationCurves": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "parameter": {
+                              "type": "string",
+                              "enum": [
+                                "transform.positionX",
+                                "transform.positionY",
+                                "transform.anchorX",
+                                "transform.anchorY",
+                                "transform.scaleX",
+                                "transform.scaleY",
+                                "transform.rotation",
+                                "transform.opacity",
+                                "transform.cropTop",
+                                "transform.cropRight",
+                                "transform.cropBottom",
+                                "transform.cropLeft"
+                              ]
+                            },
+                            "keyframes": {
+                              "minItems": 1,
+                              "maxItems": 100000,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "time": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "rate": {
+                                        "type": "object",
+                                        "properties": {
+                                          "numerator": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "denominator": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": [
+                                          "numerator",
+                                          "denominator"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "rate"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "interpolation": {
+                                    "default": "linear",
+                                    "type": "string",
+                                    "enum": [
+                                      "hold",
+                                      "linear",
+                                      "bezier",
+                                      "smooth"
+                                    ]
+                                  },
+                                  "inTangent": {
+                                    "type": "number"
+                                  },
+                                  "outTangent": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "time",
+                                  "value",
+                                  "interpolation"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "parameter",
+                            "keyframes"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "effects": {
                         "default": [],
                         "type": "array",
@@ -20276,6 +21956,118 @@
                           "blendMode"
                         ],
                         "additionalProperties": false
+                      },
+                      "automationCurves": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "parameter": {
+                              "type": "string",
+                              "enum": [
+                                "transform.positionX",
+                                "transform.positionY",
+                                "transform.anchorX",
+                                "transform.anchorY",
+                                "transform.scaleX",
+                                "transform.scaleY",
+                                "transform.rotation",
+                                "transform.opacity",
+                                "transform.cropTop",
+                                "transform.cropRight",
+                                "transform.cropBottom",
+                                "transform.cropLeft"
+                              ]
+                            },
+                            "keyframes": {
+                              "minItems": 1,
+                              "maxItems": 100000,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  },
+                                  "time": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "rate": {
+                                        "type": "object",
+                                        "properties": {
+                                          "numerator": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          },
+                                          "denominator": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 1000000
+                                          }
+                                        },
+                                        "required": [
+                                          "numerator",
+                                          "denominator"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "rate"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "interpolation": {
+                                    "default": "linear",
+                                    "type": "string",
+                                    "enum": [
+                                      "hold",
+                                      "linear",
+                                      "bezier",
+                                      "smooth"
+                                    ]
+                                  },
+                                  "inTangent": {
+                                    "type": "number"
+                                  },
+                                  "outTangent": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "time",
+                                  "value",
+                                  "interpolation"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "parameter",
+                            "keyframes"
+                          ],
+                          "additionalProperties": false
+                        }
                       },
                       "effects": {
                         "default": [],
@@ -22875,6 +24667,118 @@
                       ],
                       "additionalProperties": false
                     },
+                    "automationCurves": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "parameter": {
+                            "type": "string",
+                            "enum": [
+                              "transform.positionX",
+                              "transform.positionY",
+                              "transform.anchorX",
+                              "transform.anchorY",
+                              "transform.scaleX",
+                              "transform.scaleY",
+                              "transform.rotation",
+                              "transform.opacity",
+                              "transform.cropTop",
+                              "transform.cropRight",
+                              "transform.cropBottom",
+                              "transform.cropLeft"
+                            ]
+                          },
+                          "keyframes": {
+                            "minItems": 1,
+                            "maxItems": 100000,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "time": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "rate": {
+                                      "type": "object",
+                                      "properties": {
+                                        "numerator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        },
+                                        "denominator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        }
+                                      },
+                                      "required": [
+                                        "numerator",
+                                        "denominator"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "rate"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "interpolation": {
+                                  "default": "linear",
+                                  "type": "string",
+                                  "enum": [
+                                    "hold",
+                                    "linear",
+                                    "bezier",
+                                    "smooth"
+                                  ]
+                                },
+                                "inTangent": {
+                                  "type": "number"
+                                },
+                                "outTangent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "time",
+                                "value",
+                                "interpolation"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "parameter",
+                          "keyframes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "timeMap": {
                       "default": [],
                       "type": "array",
@@ -23974,6 +25878,118 @@
                       ],
                       "additionalProperties": false
                     },
+                    "automationCurves": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "parameter": {
+                            "type": "string",
+                            "enum": [
+                              "transform.positionX",
+                              "transform.positionY",
+                              "transform.anchorX",
+                              "transform.anchorY",
+                              "transform.scaleX",
+                              "transform.scaleY",
+                              "transform.rotation",
+                              "transform.opacity",
+                              "transform.cropTop",
+                              "transform.cropRight",
+                              "transform.cropBottom",
+                              "transform.cropLeft"
+                            ]
+                          },
+                          "keyframes": {
+                            "minItems": 1,
+                            "maxItems": 100000,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "time": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "rate": {
+                                      "type": "object",
+                                      "properties": {
+                                        "numerator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        },
+                                        "denominator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        }
+                                      },
+                                      "required": [
+                                        "numerator",
+                                        "denominator"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "rate"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "interpolation": {
+                                  "default": "linear",
+                                  "type": "string",
+                                  "enum": [
+                                    "hold",
+                                    "linear",
+                                    "bezier",
+                                    "smooth"
+                                  ]
+                                },
+                                "inTangent": {
+                                  "type": "number"
+                                },
+                                "outTangent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "time",
+                                "value",
+                                "interpolation"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "parameter",
+                          "keyframes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "effects": {
                       "default": [],
                       "type": "array",
@@ -24493,6 +26509,118 @@
                         "blendMode"
                       ],
                       "additionalProperties": false
+                    },
+                    "automationCurves": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "parameter": {
+                            "type": "string",
+                            "enum": [
+                              "transform.positionX",
+                              "transform.positionY",
+                              "transform.anchorX",
+                              "transform.anchorY",
+                              "transform.scaleX",
+                              "transform.scaleY",
+                              "transform.rotation",
+                              "transform.opacity",
+                              "transform.cropTop",
+                              "transform.cropRight",
+                              "transform.cropBottom",
+                              "transform.cropLeft"
+                            ]
+                          },
+                          "keyframes": {
+                            "minItems": 1,
+                            "maxItems": 100000,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "time": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "rate": {
+                                      "type": "object",
+                                      "properties": {
+                                        "numerator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        },
+                                        "denominator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        }
+                                      },
+                                      "required": [
+                                        "numerator",
+                                        "denominator"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "rate"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "interpolation": {
+                                  "default": "linear",
+                                  "type": "string",
+                                  "enum": [
+                                    "hold",
+                                    "linear",
+                                    "bezier",
+                                    "smooth"
+                                  ]
+                                },
+                                "inTangent": {
+                                  "type": "number"
+                                },
+                                "outTangent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "time",
+                                "value",
+                                "interpolation"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "parameter",
+                          "keyframes"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "effects": {
                       "default": [],
@@ -25683,6 +27811,118 @@
                       ],
                       "additionalProperties": false
                     },
+                    "automationCurves": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "parameter": {
+                            "type": "string",
+                            "enum": [
+                              "transform.positionX",
+                              "transform.positionY",
+                              "transform.anchorX",
+                              "transform.anchorY",
+                              "transform.scaleX",
+                              "transform.scaleY",
+                              "transform.rotation",
+                              "transform.opacity",
+                              "transform.cropTop",
+                              "transform.cropRight",
+                              "transform.cropBottom",
+                              "transform.cropLeft"
+                            ]
+                          },
+                          "keyframes": {
+                            "minItems": 1,
+                            "maxItems": 100000,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "time": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "rate": {
+                                      "type": "object",
+                                      "properties": {
+                                        "numerator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        },
+                                        "denominator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        }
+                                      },
+                                      "required": [
+                                        "numerator",
+                                        "denominator"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "rate"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "interpolation": {
+                                  "default": "linear",
+                                  "type": "string",
+                                  "enum": [
+                                    "hold",
+                                    "linear",
+                                    "bezier",
+                                    "smooth"
+                                  ]
+                                },
+                                "inTangent": {
+                                  "type": "number"
+                                },
+                                "outTangent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "time",
+                                "value",
+                                "interpolation"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "parameter",
+                          "keyframes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "timeMap": {
                       "default": [],
                       "type": "array",
@@ -26782,6 +29022,118 @@
                       ],
                       "additionalProperties": false
                     },
+                    "automationCurves": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "parameter": {
+                            "type": "string",
+                            "enum": [
+                              "transform.positionX",
+                              "transform.positionY",
+                              "transform.anchorX",
+                              "transform.anchorY",
+                              "transform.scaleX",
+                              "transform.scaleY",
+                              "transform.rotation",
+                              "transform.opacity",
+                              "transform.cropTop",
+                              "transform.cropRight",
+                              "transform.cropBottom",
+                              "transform.cropLeft"
+                            ]
+                          },
+                          "keyframes": {
+                            "minItems": 1,
+                            "maxItems": 100000,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "time": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "rate": {
+                                      "type": "object",
+                                      "properties": {
+                                        "numerator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        },
+                                        "denominator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        }
+                                      },
+                                      "required": [
+                                        "numerator",
+                                        "denominator"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "rate"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "interpolation": {
+                                  "default": "linear",
+                                  "type": "string",
+                                  "enum": [
+                                    "hold",
+                                    "linear",
+                                    "bezier",
+                                    "smooth"
+                                  ]
+                                },
+                                "inTangent": {
+                                  "type": "number"
+                                },
+                                "outTangent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "time",
+                                "value",
+                                "interpolation"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "parameter",
+                          "keyframes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "effects": {
                       "default": [],
                       "type": "array",
@@ -27301,6 +29653,118 @@
                         "blendMode"
                       ],
                       "additionalProperties": false
+                    },
+                    "automationCurves": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "parameter": {
+                            "type": "string",
+                            "enum": [
+                              "transform.positionX",
+                              "transform.positionY",
+                              "transform.anchorX",
+                              "transform.anchorY",
+                              "transform.scaleX",
+                              "transform.scaleY",
+                              "transform.rotation",
+                              "transform.opacity",
+                              "transform.cropTop",
+                              "transform.cropRight",
+                              "transform.cropBottom",
+                              "transform.cropLeft"
+                            ]
+                          },
+                          "keyframes": {
+                            "minItems": 1,
+                            "maxItems": 100000,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "time": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "rate": {
+                                      "type": "object",
+                                      "properties": {
+                                        "numerator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        },
+                                        "denominator": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        }
+                                      },
+                                      "required": [
+                                        "numerator",
+                                        "denominator"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "value",
+                                    "rate"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "interpolation": {
+                                  "default": "linear",
+                                  "type": "string",
+                                  "enum": [
+                                    "hold",
+                                    "linear",
+                                    "bezier",
+                                    "smooth"
+                                  ]
+                                },
+                                "inTangent": {
+                                  "type": "number"
+                                },
+                                "outTangent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "time",
+                                "value",
+                                "interpolation"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "parameter",
+                          "keyframes"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "effects": {
                       "default": [],
@@ -28666,6 +31130,118 @@
                   ],
                   "additionalProperties": false
                 },
+                "automationCurves": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "parameter": {
+                        "type": "string",
+                        "enum": [
+                          "transform.positionX",
+                          "transform.positionY",
+                          "transform.anchorX",
+                          "transform.anchorY",
+                          "transform.scaleX",
+                          "transform.scaleY",
+                          "transform.rotation",
+                          "transform.opacity",
+                          "transform.cropTop",
+                          "transform.cropRight",
+                          "transform.cropBottom",
+                          "transform.cropLeft"
+                        ]
+                      },
+                      "keyframes": {
+                        "minItems": 1,
+                        "maxItems": 100000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "rate": {
+                                  "type": "object",
+                                  "properties": {
+                                    "numerator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "denominator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "rate"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "interpolation": {
+                              "default": "linear",
+                              "type": "string",
+                              "enum": [
+                                "hold",
+                                "linear",
+                                "bezier",
+                                "smooth"
+                              ]
+                            },
+                            "inTangent": {
+                              "type": "number"
+                            },
+                            "outTangent": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "time",
+                            "value",
+                            "interpolation"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parameter",
+                      "keyframes"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
                 "effects": {
                   "default": [],
                   "type": "array",
@@ -29272,6 +31848,118 @@
                     "blendMode"
                   ],
                   "additionalProperties": false
+                },
+                "automationCurves": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "parameter": {
+                        "type": "string",
+                        "enum": [
+                          "transform.positionX",
+                          "transform.positionY",
+                          "transform.anchorX",
+                          "transform.anchorY",
+                          "transform.scaleX",
+                          "transform.scaleY",
+                          "transform.rotation",
+                          "transform.opacity",
+                          "transform.cropTop",
+                          "transform.cropRight",
+                          "transform.cropBottom",
+                          "transform.cropLeft"
+                        ]
+                      },
+                      "keyframes": {
+                        "minItems": 1,
+                        "maxItems": 100000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "rate": {
+                                  "type": "object",
+                                  "properties": {
+                                    "numerator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "denominator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "rate"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "interpolation": {
+                              "default": "linear",
+                              "type": "string",
+                              "enum": [
+                                "hold",
+                                "linear",
+                                "bezier",
+                                "smooth"
+                              ]
+                            },
+                            "inTangent": {
+                              "type": "number"
+                            },
+                            "outTangent": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "time",
+                            "value",
+                            "interpolation"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parameter",
+                      "keyframes"
+                    ],
+                    "additionalProperties": false
+                  }
                 },
                 "effects": {
                   "default": [],
@@ -30750,6 +33438,118 @@
                   ],
                   "additionalProperties": false
                 },
+                "automationCurves": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "parameter": {
+                        "type": "string",
+                        "enum": [
+                          "transform.positionX",
+                          "transform.positionY",
+                          "transform.anchorX",
+                          "transform.anchorY",
+                          "transform.scaleX",
+                          "transform.scaleY",
+                          "transform.rotation",
+                          "transform.opacity",
+                          "transform.cropTop",
+                          "transform.cropRight",
+                          "transform.cropBottom",
+                          "transform.cropLeft"
+                        ]
+                      },
+                      "keyframes": {
+                        "minItems": 1,
+                        "maxItems": 100000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "rate": {
+                                  "type": "object",
+                                  "properties": {
+                                    "numerator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "denominator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "rate"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "interpolation": {
+                              "default": "linear",
+                              "type": "string",
+                              "enum": [
+                                "hold",
+                                "linear",
+                                "bezier",
+                                "smooth"
+                              ]
+                            },
+                            "inTangent": {
+                              "type": "number"
+                            },
+                            "outTangent": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "time",
+                            "value",
+                            "interpolation"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parameter",
+                      "keyframes"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
                 "timeMap": {
                   "default": [],
                   "type": "array",
@@ -31572,6 +34372,118 @@
                     "blendMode"
                   ],
                   "additionalProperties": false
+                },
+                "automationCurves": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "parameter": {
+                        "type": "string",
+                        "enum": [
+                          "transform.positionX",
+                          "transform.positionY",
+                          "transform.anchorX",
+                          "transform.anchorY",
+                          "transform.scaleX",
+                          "transform.scaleY",
+                          "transform.rotation",
+                          "transform.opacity",
+                          "transform.cropTop",
+                          "transform.cropRight",
+                          "transform.cropBottom",
+                          "transform.cropLeft"
+                        ]
+                      },
+                      "keyframes": {
+                        "minItems": 1,
+                        "maxItems": 100000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "rate": {
+                                  "type": "object",
+                                  "properties": {
+                                    "numerator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "denominator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "rate"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "interpolation": {
+                              "default": "linear",
+                              "type": "string",
+                              "enum": [
+                                "hold",
+                                "linear",
+                                "bezier",
+                                "smooth"
+                              ]
+                            },
+                            "inTangent": {
+                              "type": "number"
+                            },
+                            "outTangent": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "time",
+                            "value",
+                            "interpolation"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parameter",
+                      "keyframes"
+                    ],
+                    "additionalProperties": false
+                  }
                 },
                 "timeMap": {
                   "default": [],
@@ -32400,6 +35312,118 @@
                     "blendMode"
                   ],
                   "additionalProperties": false
+                },
+                "automationCurves": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "parameter": {
+                        "type": "string",
+                        "enum": [
+                          "transform.positionX",
+                          "transform.positionY",
+                          "transform.anchorX",
+                          "transform.anchorY",
+                          "transform.scaleX",
+                          "transform.scaleY",
+                          "transform.rotation",
+                          "transform.opacity",
+                          "transform.cropTop",
+                          "transform.cropRight",
+                          "transform.cropBottom",
+                          "transform.cropLeft"
+                        ]
+                      },
+                      "keyframes": {
+                        "minItems": 1,
+                        "maxItems": 100000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "rate": {
+                                  "type": "object",
+                                  "properties": {
+                                    "numerator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "denominator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "rate"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "interpolation": {
+                              "default": "linear",
+                              "type": "string",
+                              "enum": [
+                                "hold",
+                                "linear",
+                                "bezier",
+                                "smooth"
+                              ]
+                            },
+                            "inTangent": {
+                              "type": "number"
+                            },
+                            "outTangent": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "time",
+                            "value",
+                            "interpolation"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parameter",
+                      "keyframes"
+                    ],
+                    "additionalProperties": false
+                  }
                 },
                 "timeMap": {
                   "default": [],
@@ -33385,6 +36409,118 @@
                     "blendMode"
                   ],
                   "additionalProperties": false
+                },
+                "automationCurves": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "parameter": {
+                        "type": "string",
+                        "enum": [
+                          "transform.positionX",
+                          "transform.positionY",
+                          "transform.anchorX",
+                          "transform.anchorY",
+                          "transform.scaleX",
+                          "transform.scaleY",
+                          "transform.rotation",
+                          "transform.opacity",
+                          "transform.cropTop",
+                          "transform.cropRight",
+                          "transform.cropBottom",
+                          "transform.cropLeft"
+                        ]
+                      },
+                      "keyframes": {
+                        "minItems": 1,
+                        "maxItems": 100000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "rate": {
+                                  "type": "object",
+                                  "properties": {
+                                    "numerator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    },
+                                    "denominator": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 1000000
+                                    }
+                                  },
+                                  "required": [
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "rate"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "interpolation": {
+                              "default": "linear",
+                              "type": "string",
+                              "enum": [
+                                "hold",
+                                "linear",
+                                "bezier",
+                                "smooth"
+                              ]
+                            },
+                            "inTangent": {
+                              "type": "number"
+                            },
+                            "outTangent": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "time",
+                            "value",
+                            "interpolation"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parameter",
+                      "keyframes"
+                    ],
+                    "additionalProperties": false
+                  }
                 },
                 "timeMap": {
                   "default": [],
@@ -36366,6 +39502,240 @@
             "sequenceId",
             "trackId",
             "transform"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operationId",
+        "targetId",
+        "preconditions",
+        "type",
+        "arguments"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "targetId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "preconditions": {
+          "default": [],
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "entity_exists",
+                  "entity_missing",
+                  "field_equals",
+                  "revision_equals"
+                ]
+              },
+              "entityId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "path": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "expected": {}
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "actorType": {
+              "type": "string",
+              "enum": [
+                "human",
+                "agent",
+                "system"
+              ]
+            },
+            "actorId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "provider": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "model": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "runId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 16384
+            }
+          },
+          "required": [
+            "actorType",
+            "actorId"
+          ],
+          "additionalProperties": false
+        },
+        "type": {
+          "type": "string",
+          "const": "item.automation.set"
+        },
+        "arguments": {
+          "type": "object",
+          "properties": {
+            "sequenceId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "trackId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "automationCurves": {
+              "maxItems": 128,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "parameter": {
+                    "type": "string",
+                    "enum": [
+                      "transform.positionX",
+                      "transform.positionY",
+                      "transform.anchorX",
+                      "transform.anchorY",
+                      "transform.scaleX",
+                      "transform.scaleY",
+                      "transform.rotation",
+                      "transform.opacity",
+                      "transform.cropTop",
+                      "transform.cropRight",
+                      "transform.cropBottom",
+                      "transform.cropLeft"
+                    ]
+                  },
+                  "keyframes": {
+                    "minItems": 1,
+                    "maxItems": 100000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "time": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "rate": {
+                              "type": "object",
+                              "properties": {
+                                "numerator": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 1000000
+                                },
+                                "denominator": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 1000000
+                                }
+                              },
+                              "required": [
+                                "numerator",
+                                "denominator"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "rate"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "value": {
+                          "type": "number"
+                        },
+                        "interpolation": {
+                          "default": "linear",
+                          "type": "string",
+                          "enum": [
+                            "hold",
+                            "linear",
+                            "bezier",
+                            "smooth"
+                          ]
+                        },
+                        "inTangent": {
+                          "type": "number"
+                        },
+                        "outTangent": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "time",
+                        "value",
+                        "interpolation"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "parameter",
+                  "keyframes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "sequenceId",
+            "trackId",
+            "automationCurves"
           ],
           "additionalProperties": false
         }

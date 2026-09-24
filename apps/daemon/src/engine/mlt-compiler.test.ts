@@ -80,6 +80,10 @@ describe("MLT compiler", () => {
     expect(first).toContain('<blank length="10"/>');
     expect(first).toContain(`producer_${clip.id}`);
     expect(first).toContain("A&amp;B.mp4");
+    // Lazy avformat sources report length 1 during playlist construction,
+    // which truncates source ranges before native decoding starts.
+    expect(first).toContain('<property name="mlt_service">avformat</property>');
+    expect(first).not.toContain("avformat-novalidate");
     expect(first).not.toContain("rawMlt");
   });
 
@@ -1295,6 +1299,7 @@ describe("MLT compiler", () => {
       availableCapabilities: new Set([
         "mlt.producer.color",
         "mlt.filter.qtext",
+        "mlt.transition.luma",
       ]),
     });
     expect(compiled).toContain('<property name="mlt_service">qtext</property>');
@@ -1317,6 +1322,15 @@ describe("MLT compiler", () => {
       `<track producer="caption_playlist_${captions.id}" hide="audio"/>`,
     );
     expect(compiled).not.toContain("frameos.dynamic-caption-v1");
+    expect(compiled).toContain('<property name="fixed">1</property>');
+    expect(() =>
+      compileMltXml(project, undefined, {
+        availableCapabilities: new Set([
+          "mlt.producer.color",
+          "mlt.filter.qtext",
+        ]),
+      }),
+    ).toThrow("Layer compositing");
   });
 
   it("recursively compiles matching-format nested sequences", () => {

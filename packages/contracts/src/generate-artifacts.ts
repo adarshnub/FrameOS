@@ -1507,6 +1507,112 @@ const openapi = {
         },
       },
     },
+    "/api/v1/projects/{projectId}/playback-session": {
+      post: {
+        operationId: "createPlaybackSession",
+        description:
+          "Issue an eight-hour HttpOnly cookie for media and completed artifacts belonging to this project. It grants no editing or general API access.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        responses: {
+          "200": {
+            description: "Playback cookie issued",
+            headers: { "Set-Cookie": { schema: { type: "string" } } },
+            content: {
+              "application/json": {
+                schema: envelope({
+                  type: "object",
+                  properties: { expiresInSeconds: { type: "integer" } },
+                }),
+              },
+            },
+          },
+          "404": { description: "Project not found" },
+        },
+      },
+    },
+    "/api/v1/projects/{projectId}/assets/{assetId}/content": {
+      get: {
+        operationId: "streamAssetContent",
+        security: [...bearerSecurity, { playbackCookie: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/ProjectId" },
+          {
+            name: "assetId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+          { name: "Range", in: "header", schema: { type: "string" } },
+          { name: "If-Range", in: "header", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Full media stream",
+            content: {
+              "application/octet-stream": {
+                schema: { type: "string", format: "binary" },
+              },
+            },
+          },
+          "206": {
+            description: "Requested byte range",
+            headers: { "Content-Range": { schema: { type: "string" } } },
+            content: {
+              "application/octet-stream": {
+                schema: { type: "string", format: "binary" },
+              },
+            },
+          },
+          "416": { description: "Unsatisfiable or unsupported byte range" },
+        },
+      },
+    },
+    "/api/v1/projects/{projectId}/jobs/{jobId}/artifacts/{artifactName}": {
+      get: {
+        operationId: "downloadProjectArtifact",
+        description:
+          "Download a completed artifact with byte-range support. The job must belong to the project in the URL.",
+        security: [...bearerSecurity, { playbackCookie: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/ProjectId" },
+          {
+            name: "jobId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "artifactName",
+            in: "path",
+            required: true,
+            schema: { type: "string", minLength: 1, maxLength: 255 },
+          },
+          { name: "Range", in: "header", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Full artifact",
+            content: {
+              "application/octet-stream": {
+                schema: { type: "string", format: "binary" },
+              },
+            },
+          },
+          "206": {
+            description: "Requested byte range",
+            content: {
+              "application/octet-stream": {
+                schema: { type: "string", format: "binary" },
+              },
+            },
+          },
+          "404": { description: "Artifact or project-owned job not found" },
+          "409": { description: "Job is not complete" },
+          "416": { description: "Unsatisfiable or unsupported byte range" },
+        },
+      },
+    },
     "/api/v1/jobs/{jobId}/artifacts/{artifactName}": {
       get: {
         operationId: "downloadJobArtifact",
@@ -1546,7 +1652,14 @@ const openapi = {
     },
   },
   components: {
-    securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
+    securitySchemes: {
+      bearerAuth: { type: "http", scheme: "bearer" },
+      playbackCookie: {
+        type: "apiKey",
+        in: "cookie",
+        name: "frameos_playback",
+      },
+    },
     parameters: {
       ProjectId: {
         name: "projectId",

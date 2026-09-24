@@ -17,6 +17,7 @@ services:
       # Managed uploads are persisted under FRAMEOS_DATA_DIR instead.
       FRAMEOS_MEDIA_ROOTS: /app
       FRAMEOS_GCLOUD_COMMAND: gcloud
+      FRAMEOS_ENGINE_WORKER: /app/bin/frameos-engine-worker
       CLOUDSDK_CONFIG: /gcloud
     volumes:
       # Local ADC impersonation credentials are read-only and never baked in.

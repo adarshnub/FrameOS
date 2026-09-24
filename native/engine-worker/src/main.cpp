@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <locale>
@@ -683,15 +684,24 @@ int render(
     Mlt::Factory::init();
     Mlt::Profile profile;
     Mlt::Producer producer(profile, "xml", project_path.string().c_str());
+    std::cerr << "Render frames=" << producer.get_playtime() << " length=" << producer.get_length() << " fps=" << profile.fps() << std::endl;
     if (!producer.is_valid()) {
         std::cerr << "MLT could not load the compiled project" << std::endl;
         Mlt::Factory::close();
         return 3;
     }
     if (range_in >= 0 && range_out >= range_in) {
+        if (range_out >= producer.get_length()) {
+            std::cerr << "Requested render region exceeds the loaded timeline length" << std::endl;
+            return 4;
+        }
         producer.set_in_and_out(range_in, range_out);
     }
     Mlt::Consumer consumer(profile, "avformat", output_path.string().c_str());
+    // Offline exports must wait for every frame instead of dropping late
+    // frames under the consumer's realtime playback scheduling.
+    consumer.set("real_time", -1);
+    consumer.set("terminate_on_pause", 1);
     if (output_path.extension() == ".png") {
         consumer.set("f", "image2");
         consumer.set("vcodec", "png");
@@ -919,6 +929,14 @@ int create_thumbnail(
 
 int main(int argc, char* argv[]) {
     std::locale::global(std::locale::classic());
+#if defined(__linux__)
+    // Debian MLT 7.12 checks DISPLAY even when Qt uses its offscreen backend.
+    // Headless text rendering needs both; no X server or GUI window is used.
+    if (std::getenv("DISPLAY") == nullptr) {
+        setenv("QT_QPA_PLATFORM", "offscreen", 0);
+        setenv("DISPLAY", ":99", 0);
+    }
+#endif
     if (argc < 2) {
         std::cerr << "Usage: frameos-engine-worker <health|capabilities|probe|waveform|proxy|thumbnail|render|render-region>" << std::endl;
         return 2;

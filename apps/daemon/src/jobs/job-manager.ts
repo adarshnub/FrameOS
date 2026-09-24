@@ -141,6 +141,35 @@ function sampledFrames(
 export class JobManager {
   private readonly controllers = new Map<string, AbortController>();
   private readonly activeTasks = new Set<Promise<void>>();
+  private renderTail: Promise<void> = Promise.resolve();
+
+  // Keep full-resolution renders and contact sheets from competing for RAM.
+  // A cancelled waiter releases its own slot without overtaking the active job.
+  private async acquireRenderSlot(signal: AbortSignal): Promise<() => void> {
+    if (signal.aborted)
+      throw new FrameOSError("JOB_CANCELLED", "Job was cancelled", 409);
+    const previous = this.renderTail;
+    const slot = Promise.withResolvers<void>();
+    this.renderTail = previous.then(() => slot.promise);
+    try {
+      await new Promise<void>((resolveWait, reject) => {
+        const aborted = () => {
+          signal.removeEventListener("abort", aborted);
+          reject(new FrameOSError("JOB_CANCELLED", "Job was cancelled", 409));
+        };
+        signal.addEventListener("abort", aborted, { once: true });
+        void previous.then(() => {
+          signal.removeEventListener("abort", aborted);
+          if (signal.aborted) aborted();
+          else resolveWait();
+        });
+      });
+      return slot.resolve;
+    } catch (error) {
+      slot.resolve();
+      throw error;
+    }
+  }
 
   public constructor(
     private readonly database: RuntimeDatabase,
@@ -621,7 +650,9 @@ export class JobManager {
     frameRange: { start: number; end: number },
     sourceProjectHash: string,
   ): Promise<void> {
+    let release: (() => void) | undefined;
     try {
+      release = await this.acquireRenderSlot(controller.signal);
       this.database.updateJob(job.id, {
         status: "running",
         progress: 0.05,
@@ -767,6 +798,8 @@ export class JobManager {
         entries: frameArtifacts,
         provenanceUri: provenanceArtifact.uri,
       });
+      if (controller.signal.aborted)
+        throw new FrameOSError("JOB_CANCELLED", "Job was cancelled", 409);
       const completed = this.database.updateJob(job.id, {
         status: "completed",
         progress: 1,
@@ -802,6 +835,7 @@ export class JobManager {
       });
       this.events.publish("preview.failed", failed, project.projectId);
     } finally {
+      release?.();
       this.controllers.delete(job.id);
     }
   }
@@ -909,7 +943,9 @@ export class JobManager {
     controller: AbortController,
     options: RenderExecutionOptions = {},
   ): Promise<void> {
+    let release: (() => void) | undefined;
     try {
+      release = await this.acquireRenderSlot(controller.signal);
       this.database.updateJob(job.id, {
         status: "running",
         progress: 0.05,
@@ -996,6 +1032,8 @@ export class JobManager {
               ],
               provenanceUri: provenanceArtifact.uri,
             });
+      if (controller.signal.aborted)
+        throw new FrameOSError("JOB_CANCELLED", "Job was cancelled", 409);
       const completed = this.database.updateJob(job.id, {
         status: "completed",
         progress: 1,
@@ -1029,6 +1067,7 @@ export class JobManager {
       });
       this.events.publish(`${job.kind}.failed`, failed, project.projectId);
     } finally {
+      release?.();
       this.controllers.delete(job.id);
     }
   }

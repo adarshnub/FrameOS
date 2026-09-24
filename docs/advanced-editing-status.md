@@ -2,6 +2,8 @@
 
 This checklist distinguishes implemented paths from reference-fidelity evidence. Passing state and XML tests does not establish rendered video or audio quality.
 
+The current reliability target is **10 clips, up to five minutes each, at 1080p**. The earlier 100-clip target is deferred. See [manual editor acceptance](manual-editor-testing.md) for fixes, reproducible native checks and the browser-testing gate.
+
 | Upgrade                                             | Branch status                                                                                                                                                                                                                     | Evidence still needed                                                                                                                                            |
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dynamic capability router                           | Advanced mode discovers canonical operation schemas from the executable registry and runtime catalog, filters editing scope and render dependencies, and validates the resulting MLT graph. Simple mode retains its action union. | Real worker discovery and render conformance for each routed operation. Generic operations still have parameter-dependent support, checked at graph compilation. |
@@ -35,3 +37,20 @@ The response includes `planning.intent`, selected tools and their purpose, compl
 - The Studio service validates the transaction and checks the original revision before returning the proposal.
 
 These are automated boundary tests with a mocked provider and capability snapshot. They are not native render or reference-fidelity benchmarks.
+
+## After Effects feature scope
+
+The requested feature families remain a substantial product roadmap; extra cloud capacity alone does not implement them.
+
+| Feature family                                                  | Current boundary                                                                                                            |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| VFX, explosions, smoke/fire, object removal, screen replacement | No complete simulation, roto/paint or replacement workflow.                                                                 |
+| Motion graphics and animated typography                         | Basic titles, captions and API transform automation exist; the complete visual keyframe/expression workspace is unfinished. |
+| Green-screen compositing                                        | Native layer blending is implemented; chroma-key controls, spill suppression and matte refinement are unfinished.           |
+| Glow, particles, blur, distortion and advanced colour           | Limited mapped effects only; no complete particle system or general plugin host.                                            |
+| Camera/object tracking                                          | No delivered tracking solver and editable trajectories.                                                                     |
+| Character animation                                             | No rigging, deformation or character workspace.                                                                             |
+| Hundreds of layers                                              | Not stress-tested or accepted. The initial source workload remains ten clips.                                               |
+| Expressions and scripting                                       | Typed transaction APIs provide automation; an After Effects-compatible expression engine is not implemented.                |
+
+Native regression checks now cover basic layered opacity, title compositing and independent audio mixing. Those checks establish a foundation for these features, not parity with After Effects.
