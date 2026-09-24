@@ -220,10 +220,16 @@ export async function loadConfig(
   await mkdir(dataDirectory, { recursive: true });
   const host = environment.FRAMEOS_HOST ?? "127.0.0.1";
   const dockerLocalOnly = environment.FRAMEOS_DOCKER_LOCAL_ONLY === "true";
-  if (dockerLocalOnly && host !== "0.0.0.0") {
+  const hostedMode = environment.FRAMEOS_HOSTED_MODE === "true";
+  if (
+    hostedMode &&
+    (environment.FRAMEOS_STUDIO_PASSWORD?.trim().length ?? 0) < 32
+  )
     throw new Error(
-      "FRAMEOS_DOCKER_LOCAL_ONLY requires FRAMEOS_HOST=0.0.0.0",
+      "FRAMEOS_HOSTED_MODE requires FRAMEOS_STUDIO_PASSWORD with at least 32 characters",
     );
+  if (dockerLocalOnly && host !== "0.0.0.0") {
+    throw new Error("FRAMEOS_DOCKER_LOCAL_ONLY requires FRAMEOS_HOST=0.0.0.0");
   }
   const remoteMode = !isLoopbackHost(host) && !dockerLocalOnly;
   if (isIP(host) === 0 && host !== "localhost") {

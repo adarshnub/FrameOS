@@ -64,6 +64,26 @@ describe("daemon configuration", () => {
     expect(config.remoteMode).toBe(false);
   });
 
+  it("refuses a publicly proxied studio without a strong sign-in password", async () => {
+    await expect(
+      loadConfig({
+        FRAMEOS_DATA_DIR: await dataDirectory(),
+        FRAMEOS_HOST: "0.0.0.0",
+        FRAMEOS_DOCKER_LOCAL_ONLY: "true",
+        FRAMEOS_HOSTED_MODE: "true",
+      }),
+    ).rejects.toThrow("FRAMEOS_STUDIO_PASSWORD");
+    const config = await loadConfig({
+      FRAMEOS_DATA_DIR: await dataDirectory(),
+      FRAMEOS_HOST: "0.0.0.0",
+      FRAMEOS_DOCKER_LOCAL_ONLY: "true",
+      FRAMEOS_HOSTED_MODE: "true",
+      FRAMEOS_STUDIO_PASSWORD:
+        "a-strong-studio-password-longer-than-thirty-two",
+    });
+    expect(config.studioPassword!.length).toBeGreaterThanOrEqual(32);
+  });
+
   it("limits Docker-local mode to the wildcard bind used by Compose", async () => {
     await expect(
       loadConfig({
@@ -71,7 +91,9 @@ describe("daemon configuration", () => {
         FRAMEOS_HOST: "192.168.1.10",
         FRAMEOS_DOCKER_LOCAL_ONLY: "true",
       }),
-    ).rejects.toThrow("FRAMEOS_DOCKER_LOCAL_ONLY requires FRAMEOS_HOST=0.0.0.0");
+    ).rejects.toThrow(
+      "FRAMEOS_DOCKER_LOCAL_ONLY requires FRAMEOS_HOST=0.0.0.0",
+    );
   });
 
   it("resolves explicitly configured analyzer manifests", async () => {

@@ -17,6 +17,65 @@ function editorModel() {
 }
 
 describe("visual Studio", () => {
+  it("applies an advanced proposal once and retries an uncertain response with the same transaction key", async () => {
+    const elements = Object.fromEntries(
+      ["approve", "propose", "plan-status"].map((id) => [
+        id,
+        { hidden: false, disabled: false, textContent: "" },
+      ]),
+    );
+    const calls: any[] = [];
+    let fail = true;
+    const context = createContext({
+      crypto: { randomUUID },
+      sessionStorage: { getItem: () => "" },
+      document: { getElementById: (id: string) => elements[id] },
+      pause: () => {},
+      log: () => {},
+      toast: () => {},
+      renderTimeline: () => {},
+      showFrame: async () => {},
+      applyProjectSnapshot: () => {},
+      api: async (_method: string, _path: string, body: unknown) => {
+        calls.push(body);
+        if (fail) throw Error("Connection lost");
+        return { project: { projectId: "p", revision: 1 } };
+      },
+    });
+    new Script(
+      studioJavaScript.slice(0, studioJavaScript.indexOf("let pointer=null;")),
+    ).runInContext(context);
+    new Script(
+      studioJavaScript
+        .slice(
+          studioJavaScript.indexOf("async function approveAdvancedPlan("),
+          studioJavaScript.indexOf("async function approvePlan("),
+        )
+        .replace(
+          "async function approveAdvancedPlan",
+          "async function testedApprove",
+        ),
+    ).runInContext(context);
+    new Script(
+      "state.project={projectId:'p',revision:0};state.plan={projectId:'p',revision:0,steps:[{op:{type:'one'}},{op:{type:'two'}}]}; pause=()=>{};applyProjectSnapshot=()=>{};renderTimeline=()=>{};showFrame=async()=>{};toast=()=>{};",
+    ).runInContext(context);
+    // The model defines api itself; replace it with the controlled transport.
+    context.transport = async (_m: string, _p: string, b: unknown) => {
+      calls.push(b);
+      if (fail) throw Error("Connection lost");
+      return { project: { projectId: "p", revision: 1 } };
+    };
+    new Script("api=transport").runInContext(context);
+    await expect(
+      new Script("testedApprove(state.plan)").runInContext(context),
+    ).rejects.toThrow("Connection lost");
+    fail = false;
+    await new Script("testedApprove(state.plan)").runInContext(context);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].operations).toHaveLength(2);
+    expect(calls[1].idempotencyKey).toBe(calls[0].idempotencyKey);
+    expect(new Script("state.plan").runInContext(context)).toBeNull();
+  });
   it("continues a batch import after a bad file and keeps saved assets when preview fails", async () => {
     const elements = {
       files: {

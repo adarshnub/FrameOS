@@ -1,5 +1,6 @@
 import { extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { videoEffectFilter } from "./video-effects.js";
 import {
   FrameOSError,
   rationalTimeSchema,
@@ -76,7 +77,7 @@ function animationFrame(
 }
 
 function animatedNumberAtFrame(
-  clip: Clip,
+  clip: Clip | Title,
   parameter: string,
   frame: number,
   sequence: Sequence,
@@ -122,7 +123,7 @@ function animatedNumberAtFrame(
 }
 
 function animatedTransformProperty(
-  clip: Clip,
+  clip: Clip | Title,
   sequence: Sequence,
   parameter: string,
   fallback: number,
@@ -353,6 +354,7 @@ function compileTextOverlayProducer(
   options: MltCompilerOptions,
   kind: "caption" | "title",
   hasWordTiming: boolean,
+  extraFilters: string[] = [],
 ): string {
   requireCapability(options, "mlt.producer.color", `${kind} backing`);
   requireCapability(options, capabilityIds.text, `${kind} text rendering`);
@@ -461,43 +463,26 @@ function compileTextOverlayProducer(
     property("mlt_service", "color"),
     property("resource", "0x00000000"),
     ...compileFilter(`filter_text_${id}`, "qtext", properties),
+    ...extraFilters,
     "  </producer>",
   ].join("\n");
 }
 
 function compileTitleProducer(
   title: Title,
+  sequence: Sequence,
   options: MltCompilerOptions,
 ): string {
-  if ((title.automationCurves ?? []).length > 0) {
-    capabilityUnavailable(
-      "Animated title transforms are not mapped by the MLT adapter",
-      "title.automationCurves",
-      title.automationCurves,
-      ["use an animated video clip for transform overlays"],
-    );
-  }
-  const transform = title.transform;
   if (
-    transform.positionX !== 0 ||
-    transform.positionY !== 0 ||
-    transform.anchorX !== 0.5 ||
-    transform.anchorY !== 0.5 ||
-    transform.scaleX !== 1 ||
-    transform.scaleY !== 1 ||
-    transform.rotation !== 0 ||
-    transform.cropTop !== 0 ||
-    transform.cropRight !== 0 ||
-    transform.cropBottom !== 0 ||
-    transform.cropLeft !== 0 ||
-    transform.blendMode !== "normal"
-  ) {
+    title.transform.blendMode !== "normal" ||
+    title.transform.scaleX <= 0 ||
+    title.transform.scaleY <= 0
+  )
     capabilityUnavailable(
-      "The audited qtext title mapping currently requires the neutral transform",
+      "Titles require normal blending and positive scale",
       "title.transform",
-      transform,
+      title.transform,
     );
-  }
   if (title.templateId !== undefined) {
     capabilityUnavailable(
       `Title template ${title.templateId} has no audited render mapping`,
@@ -516,10 +501,11 @@ function compileTitleProducer(
   return compileTextOverlayProducer(
     title.id,
     title.text,
-    { ...title.style, opacity: title.transform.opacity },
+    title.style,
     options,
     "title",
     false,
+    compileVisualTransform(title, sequence, options),
   );
 }
 
@@ -1771,6 +1757,18 @@ function compileClipEffects(
   const lines: string[] = [];
   for (const effect of clip.effects) {
     if (!effect.enabled) continue;
+    const video = videoEffectFilter(effect);
+    if (video) {
+      requireCapability(options, video.capabilityId, effect.capabilityId);
+      lines.push(
+        ...compileFilter(
+          `filter_video_${clip.id}_${effect.id}`,
+          video.service,
+          video.properties,
+        ),
+      );
+      continue;
+    }
     if (effect.capabilityId === "frameos.color.primary") {
       lines.push(...compilePrimaryColorEffect(clip.id, effect, options));
       continue;
@@ -1801,13 +1799,12 @@ function compileClipEffects(
   return lines;
 }
 
-function compileClipFilters(
-  clip: Clip,
+function compileVisualTransform(
+  clip: Clip | Title,
   sequence: Sequence,
   options: MltCompilerOptions,
 ): string[] {
-  assertNormalizedClipSupport(clip);
-  const lines: string[] = compileClipEffects(clip, sequence, options);
+  const lines: string[] = [];
   const transform = clip.transform;
   const automationCurves = clip.automationCurves ?? [];
   const animatedCrop = automationCurves.find((curve) =>
@@ -1980,6 +1977,18 @@ function compileClipFilters(
       ]),
     );
   }
+
+  return lines;
+}
+
+function compileClipFilters(
+  clip: Clip,
+  sequence: Sequence,
+  options: MltCompilerOptions,
+): string[] {
+  assertNormalizedClipSupport(clip);
+  const lines: string[] = compileClipEffects(clip, sequence, options);
+  lines.push(...compileVisualTransform(clip, sequence, options));
 
   if (clip.audio.pan !== 0) {
     if (sequence.format.channels > 6) {
@@ -2877,7 +2886,7 @@ function compileTrack(
   supportGraphs.push(
     ...track.items
       .filter((item): item is Title => item.type === "title" && item.enabled)
-      .map((title) => compileTitleProducer(title, options)),
+      .map((title) => compileTitleProducer(title, sequence, options)),
   );
   const editorialItems = track.items
     .filter((item) => item.type !== "transition")

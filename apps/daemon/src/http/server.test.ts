@@ -153,6 +153,50 @@ describe("HTTP control plane", () => {
     expect(response.body).not.toContain(token);
   });
 
+  it("requires studio sign-in and authorizes API calls with the signed session", async () => {
+    services.config.studioPassword =
+      "test-studio-password-longer-than-thirty-two-characters";
+    const gated = await app.inject({ method: "GET", url: "/studio" });
+    expect(gated.statusCode).toBe(302);
+    expect(gated.headers.location).toBe("/login?next=%2Fstudio");
+    expect(
+      (await app.inject({ method: "GET", url: "/api/v1/projects" })).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/login",
+          payload: { password: "incorrect" },
+        })
+      ).statusCode,
+    ).toBe(401);
+    const login = await app.inject({
+      method: "POST",
+      url: "/login",
+      payload: { password: services.config.studioPassword },
+    });
+    expect(login.statusCode).toBe(200);
+    const cookie = String(login.headers["set-cookie"]).split(";")[0]!;
+    expect(cookie).toMatch(/^frameos_studio=/);
+    expect(
+      (await app.inject({ method: "GET", url: "/studio", headers: { cookie } }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/v1/projects",
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const script = await app.inject({ method: "GET", url: "/studio/app.js" });
+    expect(script.body).toContain("const state = { token:hostedOrigin?'':");
+    expect(script.body).toContain("$('connection').hidden=true");
+  });
+
   it("exposes authenticated AI proposals with validated requests", async () => {
     const body = {
       projectId: createId(),

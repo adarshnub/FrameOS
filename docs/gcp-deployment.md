@@ -38,10 +38,28 @@ origin-studio.in {
 }
 ```
 
-For local development, open `http://127.0.0.1:31415/studio`. The daemon supports
-the Studio password at `/login` when configured, and bearer tokens for API
-clients. Public health and sign-in requests succeed; unauthenticated project
-API requests return HTTP 401.
+For local development, open `http://127.0.0.1:31415/studio`. The hosted
+deployment requires `FRAMEOS_HOSTED_MODE=true` and a strong Studio password.
+`/studio` redirects unsigned visitors to `/login`; a secure, HTTP-only session
+cookie then authorizes Studio API requests. The password is stored in Secret
+Manager as `frameos-studio-password` and retrieved by the deploy script. A
+publicly proxied daemon without that secret fails startup. Bearer tokens remain
+available for API clients; the hosted browser does not prompt for a daemon
+token.
+
+Project administrators can retrieve the Studio password for invited editors
+from Secret Manager in the GCP console, or through an authenticated CLI:
+
+```powershell
+gcloud secrets versions access latest `
+  --secret=frameos-studio-password `
+  --project=gen-lang-client-0644821693
+```
+
+This is one shared password for the current editor-testing deployment. It does
+not provide separate user accounts or project isolation. Distribute it only to
+the invited test group. Public health and sign-in requests succeed;
+unauthenticated project API requests return HTTP 401.
 
 ## Connect privately
 

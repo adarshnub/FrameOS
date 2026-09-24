@@ -6,6 +6,7 @@ import {
 } from "@frameos/contracts";
 import type { EngineWorkerClient } from "../engine/worker-client.js";
 import { analyzerDescriptors } from "../analysis/analysis-service.js";
+import { videoEffectCapabilities } from "../engine/video-effects.js";
 
 interface AdapterCapabilityDefinition {
   id: string;
@@ -17,6 +18,7 @@ interface AdapterCapabilityDefinition {
 }
 
 const adapterCapabilityDefinitions: AdapterCapabilityDefinition[] = [
+  ...videoEffectCapabilities,
   {
     id: "preview.contact_sheet",
     kind: "consumer",
