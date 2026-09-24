@@ -250,6 +250,7 @@ describe("Studio AI service", () => {
       text: JSON.stringify({
         suggestedBrief:
           "Create a 10-second montage. Overlay the title FrameOS Highlights during the first two seconds. Choose source highlights after analysis.",
+        titleText: "FrameOS Highlights",
         suggestions: [
           "Place the title over footage so it does not extend runtime.",
         ],
@@ -275,6 +276,33 @@ describe("Studio AI service", () => {
     expect(services.analysis.search).not.toHaveBeenCalled();
     expect(validate).not.toHaveBeenCalled();
     expect(project.revision).toBe(0);
+  });
+  it("keeps a suggested title explicit and does not invent an exact runtime", async () => {
+    const { request } = await fixture();
+    vi.spyOn(services.capabilities, "listCapabilities").mockResolvedValue([]);
+    const generate = vi.fn<GenerateEdit>().mockResolvedValue({
+      text: JSON.stringify({
+        suggestedBrief:
+          "Create an opening title and a montage that must be exactly 10 seconds.",
+        titleText: "Highlights",
+        suggestions: [],
+        blockingQuestions: [],
+      }),
+      model: "gemini-test",
+      inputTokens: 100,
+      outputTokens: 50,
+    });
+    const result = await new StudioAiService(services, generate).checkBrief(
+      briefCheckRequestSchema.parse({
+        projectId: request.projectId,
+        baseRevision: request.baseRevision,
+        assetIds: request.assetIds,
+        brief: "Make a 10-second montage with an animated opening title.",
+      }),
+    );
+    expect(result.suggestedBrief).toContain('Opening title text: "Highlights"');
+    expect(result.suggestedBrief).toContain("should be about 10 seconds");
+    expect(result.ready).toBe(true);
   });
   it("calls a real provider boundary with the brief and returns validated operations, never commits", async () => {
     const { project, request, plan, validate } = await fixture();
