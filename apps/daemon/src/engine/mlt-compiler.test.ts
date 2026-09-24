@@ -2,6 +2,8 @@ import {
   createId,
   frameTime,
   FrameOSError,
+  titleSchema,
+  trackSchema,
   type Asset,
   type Clip,
   type CaptionTrack,
@@ -13,6 +15,44 @@ import { createProject } from "../domain/project-factory.js";
 import { compileMltXml } from "./mlt-compiler.js";
 
 describe("MLT compiler", () => {
+  it("keeps three visual layers and source audio in one render graph", () => {
+    const project = createProject({ name: "Three visual layers" });
+    const sequence = project.sequences[project.settings.defaultSequenceId]!;
+    const base = sequence.tracks.find((track) => track.kind === "video")!;
+    const range = {
+      start: frameTime(0, sequence.format.frameRate),
+      duration: frameTime(30, sequence.format.frameRate),
+    };
+    for (const [index, track] of [
+      base,
+      trackSchema.parse({ id: createId(), kind: "video", name: "Middle", order: 20 }),
+      trackSchema.parse({ id: createId(), kind: "video", name: "Top", order: 30 }),
+    ].entries()) {
+      track.items.push(
+        titleSchema.parse({
+          id: createId(),
+          type: "title",
+          name: `Layer ${index}`,
+          text: `Layer ${index}`,
+          timelineRange: range,
+        }),
+      );
+      if (track !== base) sequence.tracks.push(track);
+    }
+    const xml = compileMltXml(project, undefined, {
+      availableCapabilities: new Set([
+        "mlt.producer.color",
+        "mlt.filter.qtext",
+        "mlt.transition.luma",
+      ]),
+    });
+    const ids = [...xml.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(xml).toContain(`producer="playlist_${base.id}_visual"`);
+    expect(xml).toContain("frameos_visual_");
+    expect(xml).toMatch(/<track producer="frameos_visual_[^"]+" hide="audio"\/>/);
+  });
+
   it("compiles the same snapshot deterministically without raw project metadata", () => {
     const project = createProject({
       name: "Compiler",

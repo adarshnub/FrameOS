@@ -3191,13 +3191,26 @@ function compileSequenceGraph(
     for (const next of visualTracks.slice(1))
       addLayer("luma", visualTracks[0]!, next, [["fixed", 1]]);
   }
-  if (audioTracks.length > 1) {
+  const topTrackIndex = trackElements.length - 1;
+  const audioOutputTrack = audioTracks[0];
+  if (audioTracks.length > 1 ||
+      (audioOutputTrack !== undefined && audioOutputTrack < topTrackIndex)) {
     requireCapability(options, "mlt.transition.mix", "Multitrack audio mixing");
     for (const next of audioTracks.slice(1))
       addLayer("mix", audioTracks[0]!, next, [
         ["sum", 1],
         ["start", 1],
       ]);
+    // A higher video-only track otherwise replaces the lower audio lane in
+    // MLT's tractor, even when the video clip itself is muted.
+    if (audioOutputTrack !== undefined &&
+        audioOutputTrack < topTrackIndex &&
+        !audioTracks.includes(topTrackIndex)) {
+      addLayer("mix", audioOutputTrack, topTrackIndex, [
+        ["sum", 1],
+        ["start", 1],
+      ]);
+    }
   }
   const outputFilters = compileContainerEffects(
     sequence.id,
@@ -3290,13 +3303,119 @@ export function compileMltXml(
     ),
   );
 
+  const graphLines = [...producers, ...generatorProducers, ...sequenceGraphs];
+  const orderedTracks = selected.tracks
+    .filter((track) => track.enabled)
+    .toSorted((left, right) => left.order - right.order);
+  const visualPlaylistIds = orderedTracks
+    .filter(
+      (track) =>
+        track.kind === "video" &&
+        track.items.some((item) => item.enabled && item.type !== "gap"),
+    )
+    .map((track) => `playlist_${track.id}`)
+    .concat(
+      selected.captions
+        .filter((track) => track.enabled)
+        .map((track) => `caption_playlist_${track.id}`),
+    );
+  // MLT 7.12 does not reliably composite three or more video tracks in one
+  // tractor: a later keyed layer can replace the earlier title/background.
+  // Pairwise tractors preserve each composite. Separate source instances avoid
+  // MLT's missing-clone errors when the original tracks also supply audio.
+  let renderGraph = graphLines;
+  if (visualPlaylistIds.length > 2) {
+    const outputStart = graphLines.findIndex(
+      (line) => line.trim() === '<tractor id="frameos_output">',
+    );
+    if (outputStart < 0) {
+      throw new FrameOSError(
+        "INTERNAL_ERROR",
+        "The compiled sequence has no output tractor",
+        500,
+      );
+    }
+    const cloneId = (line: string): string =>
+      line.replace(/\b(id|producer)="([^"]+)"/g, (_match, name: string, id: string) =>
+        `${name}="${id}_visual"`,
+      );
+    const clonedGraph = graphLines.slice(0, outputStart).map(cloneId);
+    const visualLayers: string[] = [];
+    let previous = `${visualPlaylistIds[0]}_visual`;
+    for (const [index, playlistId] of visualPlaylistIds.slice(1).entries()) {
+      const stage = `frameos_visual_${selected.id}_${index + 1}`;
+      visualLayers.push(
+        `  <tractor id="${escapeXml(stage)}">`,
+        "    <multitrack>",
+        `      <track producer="${escapeXml(previous)}"/>`,
+        `      <track producer="${escapeXml(playlistId)}_visual"/>`,
+        "    </multitrack>",
+        `    <transition id="${escapeXml(stage)}_luma">`,
+        property("mlt_service", "luma"),
+        property("a_track", 0),
+        property("b_track", 1),
+        property("always_active", 1),
+        property("fixed", 1),
+        "    </transition>",
+        "  </tractor>",
+      );
+      previous = stage;
+    }
+    const outputLines = graphLines.slice(outputStart);
+    const multitrackEnd = outputLines.findIndex(
+      (line) => line.trim() === "</multitrack>",
+    );
+    if (multitrackEnd < 0) {
+      throw new FrameOSError(
+        "INTERNAL_ERROR",
+        "The compiled sequence has no output multitrack",
+        500,
+      );
+    }
+    outputLines.splice(
+      multitrackEnd,
+      0,
+      `      <track producer="${escapeXml(previous)}" hide="audio"/>`,
+    );
+    const sourceAudioTrack = orderedTracks.findIndex(
+      (track) =>
+        !track.muted &&
+        track.items.some(
+          (item) =>
+            item.enabled &&
+            item.type === "clip" &&
+            !item.audio.muted &&
+            project.assets[item.assetId]?.kind !== "image",
+        ),
+    );
+    if (sourceAudioTrack >= 0) {
+      requireCapability(options, "mlt.transition.mix", "Multitrack audio mixing");
+      const visualTrackIndex = orderedTracks.length +
+        selected.captions.filter((track) => track.enabled).length;
+      outputLines.splice(outputLines.length - 1, 0,
+        `    <transition id="frameos_visual_audio_${escapeXml(selected.id)}">`,
+        property("mlt_service", "mix"),
+        property("a_track", sourceAudioTrack),
+        property("b_track", visualTrackIndex),
+        property("always_active", 1),
+        property("sum", 1),
+        property("start", 1),
+        "    </transition>",
+      );
+    }
+    renderGraph = [
+      ...graphLines.slice(0, outputStart),
+      ...clonedGraph,
+      ...visualLayers,
+      ...outputLines,
+    ];
+  }
+
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<mlt LC_NUMERIC="C" version="7.40.0">',
     `  <profile width="${selected.format.width}" height="${selected.format.height}" frame_rate_num="${rate.numerator}" frame_rate_den="${rate.denominator}" sample_aspect_num="${selected.format.pixelAspectRatio.numerator}" sample_aspect_den="${selected.format.pixelAspectRatio.denominator}" progressive="1" colorspace="709"/>`,
-    ...producers,
-    ...generatorProducers,
-    ...sequenceGraphs,
+    ...renderGraph,
     "</mlt>",
     "",
   ].join("\n");

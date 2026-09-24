@@ -17,6 +17,25 @@ function editorModel() {
 }
 
 describe("visual Studio", () => {
+  it("places video sound on an independently trimmable audio track", async () => {
+    const run = editorModel();
+    const videoId = randomUUID();
+    const audioId = randomUUID();
+    run(`state.project={settings:{defaultSequenceId:'s'},sequences:{s:{id:'s',format:{frameRate:{numerator:30,denominator:1}},tracks:[{id:'${videoId}',kind:'video',order:1,enabled:true,locked:false,items:[]},{id:'${audioId}',kind:'audio',order:0,enabled:true,locked:false,items:[]}]}}};state.assets=[{id:'source',kind:'video',name:'Interview.mp4',streams:[{kind:'video'},{kind:'audio'}],duration:{value:120,rate:{numerator:30,denominator:1}}}];commit=async ops=>{state.lastOps=ops;for(const op of ops){if(op.type==='track.add')seq().tracks.push(op.arguments.track);if(op.type==='item.add')seq().tracks.find(t=>t.id===op.arguments.trackId).items.push(op.arguments.item);}};seek=()=>{};renderTimeline=()=>{};fillProperties=()=>{};`);
+    await run("addAsset('source')");
+    expect(run("state.lastOps.map(op=>op.type).join(',')")).toBe(
+      "item.add,item.add,clip.link",
+    );
+    expect(run(`seq().tracks.find(t=>t.id==='${videoId}').items[0].audio.muted`)).toBe(true);
+    expect(run(`seq().tracks.find(t=>t.id==='${audioId}').items[0].audio.muted`)).toBeUndefined();
+    expect(run(`seq().tracks.find(t=>t.id==='${audioId}').items[0].assetId`)).toBe("source");
+    await run(`trimTo(seq().tracks.find(t=>t.id==='${audioId}').items[0],seq().tracks.find(t=>t.id==='${audioId}'),1,1,2)`);
+    expect(run("state.lastOps.map(op=>op.type).join(',')")).toBe(
+      "clip.trim,clip.move",
+    );
+    expect(run(`state.lastOps.every(op=>op.targetId===seq().tracks.find(t=>t.id==='${audioId}').items[0].id)`)).toBe(true);
+  });
+
   it("applies an advanced proposal once and retries an uncertain response with the same transaction key", async () => {
     const elements = Object.fromEntries(
       ["approve", "propose", "plan-status"].map((id) => [

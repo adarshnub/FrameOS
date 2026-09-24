@@ -258,6 +258,74 @@ try {
   );
   assert(whiteCount(image(output, 0)) < 5, "Title must begin transparent");
   check("native title animates opacity and position");
+  video.items = [clip(assets.blue)];
+  overlay.items = [
+    titleSchema.parse({
+      id: createId(),
+      type: "title",
+      name: "Three-layer title",
+      text: "FRAMEOS",
+      timelineRange: range(0, 60),
+      style: { fontSize: 150 },
+    }),
+  ];
+  const foreground = trackSchema.parse({
+    id: createId(),
+    kind: "video",
+    name: "Keyed foreground",
+    order: 20,
+  });
+  foreground.items = [clip(assets.green)];
+  foreground.items[0].effects = [
+    effect("frameos.video.chroma-key", { color: "#00ff00", tolerance: 0.15 }),
+  ];
+  sequence.tracks.push(foreground);
+  bytes = image(await render("three-layer-composite"), 1.25);
+  assert(
+    pixel(bytes, 10, 10)[2] > 200 && pixel(bytes, 10, 10)[1] < 40,
+    "Three-layer key must reveal the blue background",
+  );
+  assert(
+    pixel(bytes, 96, 54)[0] > 200 && pixel(bytes, 96, 54)[2] < 40,
+    "Three-layer key must preserve the red foreground",
+  );
+  assert(whiteCount(bytes) > 100, "The middle title must remain visible");
+  check("native three-layer key retains title, background and foreground");
+  const detached = createProject({ name: "Detached source audio QA" });
+  detached.assets[assets.blue.id] = assets.blue;
+  const detachedSequence =
+    detached.sequences[detached.settings.defaultSequenceId];
+  const picture = clip(assets.blue);
+  picture.audio.muted = true;
+  const sound = clip(assets.blue);
+  sound.timelineRange = range(15, 45);
+  sound.sourceRange = range(15, 45);
+  picture.links = [sound.id];
+  sound.links = [picture.id];
+  detachedSequence.tracks.find((track) => track.kind === "video").items = [
+    picture,
+  ];
+  detachedSequence.tracks.find((track) => track.kind === "audio").items = [
+    sound,
+  ];
+  const detachedOutput = await render("detached-source-audio", detached);
+  const soundLevel = (at) => {
+    const samples = run("ffmpeg", [
+      "-v", "error", "-ss", String(at), "-t", "0.25", "-i", detachedOutput,
+      "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1",
+    ]);
+    let sum = 0;
+    for (let offset = 0; offset + 1 < samples.length; offset += 2) {
+      const value = samples.readInt16LE(offset);
+      sum += value * value;
+    }
+    return Math.sqrt(sum / Math.max(1, samples.length / 2));
+  };
+  assert(
+    soundLevel(0.1) < 20 && soundLevel(1) > 100,
+    "Detached audio trim must silence the opening while keeping later sound",
+  );
+  check("native detached source audio trims without silencing video");
   if (process.argv.includes("--live")) {
     const generator = vertexEditGenerator(process.env);
     let generation = 0;

@@ -691,7 +691,6 @@ int render(
     std::cerr << "Render frames=" << producer.get_playtime() << " length=" << producer.get_length() << " fps=" << profile.fps() << std::endl;
     if (!producer.is_valid()) {
         std::cerr << "MLT could not load the compiled project" << std::endl;
-        Mlt::Factory::close();
         return 3;
     }
     if (range_in >= 0 && range_out >= range_in) {
@@ -718,17 +717,18 @@ int render(
     if (channels != nullptr && channels[0] != '\0') consumer.set("channels", std::stoi(channels));
     if (!consumer.is_valid() || consumer.connect(producer) != 0) {
         std::cerr << "MLT could not create the output consumer" << std::endl;
-        Mlt::Factory::close();
         return 3;
     }
     const int result = consumer.run();
-    Mlt::Factory::close();
     if (result != 0) {
         std::cerr << "MLT render failed" << std::endl;
         return 4;
     }
     std::cout << "{\"status\":\"completed\"}" << std::endl;
-    return 0;
+    // MLT 7.12 can segfault while destroying a completed graph that combines
+    // avfilter and affine instances. The consumer has finished and flushed the
+    // file; this one-command worker can let the OS reclaim MLT's graph.
+    std::_Exit(0);
 #else
     static_cast<void>(output_path);
     static_cast<void>(range_in);

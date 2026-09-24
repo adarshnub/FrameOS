@@ -51,12 +51,12 @@ The requested feature families remain a substantial product roadmap; extra cloud
 | Feature family                                                  | Current boundary                                                                                                                          |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | VFX, explosions, smoke/fire, object removal, screen replacement | No complete simulation, roto/paint or replacement workflow.                                                                               |
-| Motion graphics and animated typography                         | Native title position/scale/rotation/opacity animation is available to advanced AI; a visual keyframe/expression workspace is unfinished. |
-| Green-screen compositing                                        | Basic native chroma key and layer blending are exposed to AI; spill suppression and matte refinement are unfinished.                      |
+| Motion graphics and animated typography                         | Manual title styling and position/scale/rotation/opacity keyframes are available in Studio; a visual graph/expression workspace is unfinished. |
+| Green-screen compositing                                        | Manual native chroma key and three-layer compositing are available; spill suppression and matte refinement are unfinished.              |
 | Glow, particles, blur, distortion and advanced colour           | Gaussian blur and vignette are exposed to AI alongside existing colour controls; no particle system or general plugin host.               |
 | Camera/object tracking                                          | No delivered tracking solver and editable trajectories.                                                                                   |
 | Character animation                                             | No rigging, deformation or character workspace.                                                                                           |
 | Hundreds of layers                                              | Not stress-tested or accepted. The initial source workload remains ten clips.                                                             |
 | Expressions and scripting                                       | Typed transaction APIs provide automation; an After Effects-compatible expression engine is not implemented.                              |
 
-Native regression checks now cover basic layered opacity, title compositing and independent audio mixing. Those checks establish a foundation for these features, not parity with After Effects.
+Native regression checks now cover basic layered opacity, three-layer title/chroma compositing, independent audio mixing, and a detached source soundtrack that can be trimmed separately from picture. Those checks establish a foundation for these features, not parity with After Effects.

@@ -13,6 +13,8 @@ Target: **1080p, up to 10 source clips, each up to five minutes**. A sequential 
 - Exports wait for every frame. Requested regions beyond the loaded timeline fail explicitly.
 - Native video layers composite and audio tracks mix explicitly. Affine transforms preserve opacity. Headless Linux workers initialize Qt's offscreen backend so titles remain visible.
 - Selecting a video layer in Studio Properties now exposes an editable native effect stack: chroma key, Gaussian blur, vignette and primary color. Effects can be parameterized, bypassed, removed and reordered. Selecting a title exposes text, font size/weight, color, background and placement. Video layers and titles can receive position, scale, rotation and opacity keyframes at the playhead. These controls write canonical transactions and remain undoable. Browser preview does not establish final effect or animation quality; export a native MP4 to review it.
+- Adding a video with a probed audio stream places a muted picture clip and an audible clip from the same source on a separate audio track in one undoable transaction. The audio clip can be selected, trimmed, split, moved, deleted, muted and gain-adjusted independently. The pair carries reciprocal source links, but manual edits to one item do not automatically change the other; check sync after independent trims or moves. Existing audio tracks are reused when the new clip does not overlap their contents.
+- The native worker now exits after a completed render without invoking the crashing MLT 7.12 graph teardown path. Three or more visible layers use pairwise compositing so a keyed foreground does not erase a middle title. An explicit audio mix keeps a lower audio lane audible beneath muted picture clips. Pairwise compositing duplicates source readers for visual processing, so export cost rises with layer count.
 - Native exports and contact sheets queue behind the active render to avoid competing for memory. Queued cancellation does not start a worker or let later jobs overtake an active export.
 - AI planning has a configurable ten-minute deadline and one cancellable retry for temporary HTTP 429/503 errors. Planning still requires approval before edits are applied.
 
@@ -23,13 +25,14 @@ Build the daemon and native worker, make `ffmpeg` and `ffprobe` available, then 
 ```sh
 FRAMEOS_ENGINE_WORKER=/path/to/frameos-engine-worker node tools/manual-editing-qa.mjs --long-render
 FRAMEOS_ENGINE_WORKER=/path/to/frameos-engine-worker node tools/compositing-qa.mjs
+FRAMEOS_ENGINE_WORKER=/path/to/frameos-engine-worker node tools/ai-effects-qa.mjs
 ```
 
 Use `FRAMEOS_QA_DIR` to choose an isolated output directory. The default is `.frameos-data/qa/native`. These scripts use generated media and do not call an AI provider or change an existing project.
 
 The manual check imports ten real five-minute files, constructs the 50-minute timeline, splits a clip, applies gain, exercises repeated undo/redo, and verifies that an invalid overlap leaves the revision unchanged. It renders seven 1080p regions from the beginning through the last two seconds, decodes their pictures and audio, checks the split's −9 dB gain change, and optionally exports the entire 50 minutes.
 
-The compositing check decodes half-opacity footage, visible text over footage, and a two-tone audio mix. JSON reports record the actual outcome. Synthetic solid-colour sources establish timing and basic rendering behaviour; they do not establish performance or fidelity for every camera codec, variable frame rate, effect stack or real-world recording.
+The compositing check decodes half-opacity footage, visible text over footage, and a two-tone audio mix. The AI effects check also renders a three-layer keyed/title composite and verifies that a detached source soundtrack can begin later than its picture. JSON reports record the actual outcome. Synthetic solid-colour sources establish timing and basic rendering behaviour; they do not establish performance or fidelity for every camera codec, variable frame rate, effect stack or real-world recording.
 
 `cloudbuild.manual-qa.yaml` runs both scripts on a temporary GCP build worker, collects private artifacts in the configured bucket, and publishes a candidate image only if both reports pass. It never deploys the live editor. The build has a two-hour timeout.
 
