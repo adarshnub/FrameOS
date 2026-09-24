@@ -27,6 +27,8 @@ This delivery adds [AI effects and compositing](ai-effects-testing.md): normaliz
 
 Choose **Advanced AI editing & effects** under the Studio edit assistant's planning mode (the default). The API equivalent is `planner: "advanced"` on the existing plan request. A native worker is required before provider calls; simple mode remains available without it. The configured model is unchanged.
 
+In Studio, **Check brief before analysis** now runs a text-only Gemini pass before any footage analysis. It shows a suggested rewrite and blocking questions; the user accepts the rewrite before **Analyze footage & plan edits** becomes available. Changing the brief, selected media, planning mode, or analysis setting invalidates the check. The check does not inspect footage or guarantee that the later plan will pass render validation; it removes avoidable wording questions before the slower video step. The API equivalent is `POST /api/v1/studio/ai/brief-check`.
+
 The response includes `planning.intent`, selected tools and their purpose, completed validation stages, and combined provider usage, including a repair call when needed. Approval applies all advanced operations in one revision; one Undo reverses the plan. Nothing is committed by planning. Still-frame automatic corrections are disabled for advanced plans until a compatible critic is implemented; users must review native playback manually.
 
 ## Acceptance completed for the planner slice

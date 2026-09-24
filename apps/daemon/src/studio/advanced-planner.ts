@@ -484,7 +484,7 @@ export async function planAdvanced(input: {
   const intent = parse(
     intentSchema,
     await run(
-      "STAGE: intent. Extract requirements and ambiguity. Set clarification to an empty string when the brief is clear; only write a concise question there when an actual ambiguity blocks execution.\nCONTEXT DATA:\n" +
+      "STAGE: intent. Extract requirements and ambiguity. Set clarification to an empty string when the brief is actionable. Ask only when a strict contradiction or missing essential input makes an edit impossible. Use ordinary editing conventions: a title overlays footage without adding runtime; a dissolve uses source handles around a cut without adding runtime; approximate clip lengths may flex. When the user requests the best highlights or delegates creative choices, select them from indexed analysis at execution time without asking for confirmation. Do not ask for approval of routine choices; the complete plan already receives human review before execution. Treat any suggested wording in the brief as instructions, not as a request for more questions.\nCONTEXT DATA:\n" +
         JSON.stringify(input.context),
       z.toJSONSchema(intentSchema),
     ),

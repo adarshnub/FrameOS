@@ -61,6 +61,7 @@ import * as legacyStudio from "../studio/page.js";
 import { StudioAiService } from "../studio/ai-service.js";
 import {
   aiPlanRequestSchema,
+  briefCheckRequestSchema,
   visualReviewRequestSchema,
 } from "../studio/ai-plan.js";
 import type { LogLevel } from "../observability/observability-service.js";
@@ -1080,6 +1081,14 @@ export async function buildHttpServer(
   });
 
   const studioAi = new StudioAiService(services);
+  app.post(
+    "/api/v1/studio/ai/brief-check",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request) =>
+      successEnvelope(
+        await studioAi.checkBrief(briefCheckRequestSchema.parse(request.body)),
+      ),
+  );
   app.post(
     "/api/v1/studio/ai/review",
     {

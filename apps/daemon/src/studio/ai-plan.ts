@@ -193,6 +193,18 @@ export const aiPlanRequestSchema = z
   })
   .strict();
 export type AiPlanRequest = z.infer<typeof aiPlanRequestSchema>;
+export const briefCheckRequestSchema = aiPlanRequestSchema
+  .pick({
+    planner: true,
+    projectId: true,
+    baseRevision: true,
+    brief: true,
+    assetIds: true,
+    referenceAssetId: true,
+    secondsPerClip: true,
+  })
+  .extend({ analyzeFootage: z.boolean().default(true) });
+export type BriefCheckRequest = z.infer<typeof briefCheckRequestSchema>;
 export const visualReviewRequestSchema = aiPlanRequestSchema
   .extend({
     frames: z
@@ -746,8 +758,14 @@ export function compileAiPlan(
           assetId,
           timelineRange: range(a.start, a.duration),
           sourceRange: {
-            start: fromSeconds(a.source, asset.duration?.rate ?? seq().format.frameRate).time,
-            duration: fromSeconds(a.duration, asset.duration?.rate ?? seq().format.frameRate).time,
+            start: fromSeconds(
+              a.source,
+              asset.duration?.rate ?? seq().format.frameRate,
+            ).time,
+            duration: fromSeconds(
+              a.duration,
+              asset.duration?.rate ?? seq().format.frameRate,
+            ).time,
           },
           enabled: true,
           locked: false,

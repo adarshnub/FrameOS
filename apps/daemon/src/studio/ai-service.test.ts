@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assetSchema, createId } from "@frameos/contracts";
 import { createProject } from "../domain/project-factory.js";
 import { createServices, type FrameOSServices } from "../services/services.js";
-import { aiPlanRequestSchema } from "./ai-plan.js";
+import { aiPlanRequestSchema, briefCheckRequestSchema } from "./ai-plan.js";
 import { aiPlanSchema, aiActionSchema } from "./ai-plan.js";
 import { z } from "zod";
 import {
@@ -243,6 +243,39 @@ describe("Studio AI service", () => {
     };
     return { project, request, plan, validate };
   }
+  it("checks brief text before footage analysis or timeline changes", async () => {
+    const { project, request, validate } = await fixture();
+    vi.spyOn(services.capabilities, "listCapabilities").mockResolvedValue([]);
+    const generate = vi.fn<GenerateEdit>().mockResolvedValue({
+      text: JSON.stringify({
+        suggestedBrief:
+          "Create a 10-second montage. Overlay the title FrameOS Highlights during the first two seconds. Choose source highlights after analysis.",
+        suggestions: [
+          "Place the title over footage so it does not extend runtime.",
+        ],
+        blockingQuestions: [],
+      }),
+      model: "gemini-test",
+      inputTokens: 120,
+      outputTokens: 45,
+    });
+    const result = await new StudioAiService(services, generate).checkBrief(
+      briefCheckRequestSchema.parse({
+        projectId: request.projectId,
+        baseRevision: request.baseRevision,
+        assetIds: request.assetIds,
+        brief: "Make a 10-second edit with a title",
+      }),
+    );
+    expect(result.ready).toBe(true);
+    expect(result.suggestedBrief).toContain("Overlay the title");
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate.mock.calls[0]![4]).toEqual({ maxOutputTokens: 2048 });
+    expect(generate.mock.calls[0]![0]).not.toContain("file:///sample.mp4");
+    expect(services.analysis.search).not.toHaveBeenCalled();
+    expect(validate).not.toHaveBeenCalled();
+    expect(project.revision).toBe(0);
+  });
   it("calls a real provider boundary with the brief and returns validated operations, never commits", async () => {
     const { project, request, plan, validate } = await fixture();
     const generate = vi.fn<GenerateEdit>().mockResolvedValue({
