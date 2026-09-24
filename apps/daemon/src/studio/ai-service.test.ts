@@ -304,6 +304,34 @@ describe("Studio AI service", () => {
     expect(result.suggestedBrief).toContain("should be about 10 seconds");
     expect(result.ready).toBe(true);
   });
+  it("blocks beat cuts without timeline music before planning", async () => {
+    const { request, validate } = await fixture();
+    const generate = vi.fn<GenerateEdit>().mockResolvedValue({
+      text: JSON.stringify({
+        suggestedBrief: "Cut the video to the music beats.",
+        titleText: "",
+        suggestions: [],
+        blockingQuestions: [],
+      }),
+      model: "gemini-test",
+      inputTokens: 20,
+      outputTokens: 15,
+    });
+    const result = await new StudioAiService(services, generate).checkBrief(
+      briefCheckRequestSchema.parse({
+        projectId: request.projectId,
+        baseRevision: request.baseRevision,
+        assetIds: request.assetIds,
+        brief: "Cut the video to the music beats.",
+      }),
+    );
+    expect(result.ready).toBe(false);
+    expect(result.blockingQuestions).toContain(
+      "Add the music clip to an audio track before requesting beat-aligned cuts.",
+    );
+    expect(services.analysis.search).not.toHaveBeenCalled();
+    expect(validate).not.toHaveBeenCalled();
+  });
   it("calls a real provider boundary with the brief and returns validated operations, never commits", async () => {
     const { project, request, plan, validate } = await fixture();
     const generate = vi.fn<GenerateEdit>().mockResolvedValue({

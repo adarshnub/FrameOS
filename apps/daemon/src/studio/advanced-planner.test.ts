@@ -396,6 +396,7 @@ describe("advanced capability routing and planning", () => {
     const { capabilities } = fixture();
     const names = routeOperations(capabilities).map((o) => o.name);
     expect(names).toContain("video.position.set");
+    expect(names).toContain("clip.ripple_delete");
     expect(names).not.toContain("video.crop.set");
     expect(names).not.toContain("asset.remove");
     expect(names).not.toContain("color.lut.apply");

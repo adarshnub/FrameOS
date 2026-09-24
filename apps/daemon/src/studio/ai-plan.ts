@@ -201,6 +201,7 @@ export const briefCheckRequestSchema = aiPlanRequestSchema
     brief: true,
     assetIds: true,
     referenceAssetId: true,
+    selectedItemId: true,
     secondsPerClip: true,
   })
   .extend({ analyzeFootage: z.boolean().default(true) });

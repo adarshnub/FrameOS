@@ -33,13 +33,20 @@ COPY --from=build /app/apps/daemon/package.json ./apps/daemon/package.json
 COPY --from=build /app/apps/daemon/dist ./apps/daemon/dist
 COPY --from=build /app/packages/contracts/package.json ./packages/contracts/package.json
 COPY --from=build /app/packages/contracts/dist ./packages/contracts/dist
+COPY --from=build /app/tools/analyzers/ffmpeg-beat-worker.mjs /app/tools/analyzers/create-ffmpeg-beat-manifest.mjs ./tools/analyzers/
 RUN mkdir -p /app/bin
 COPY --from=build /tmp/engine-worker/frameos-engine-worker /app/bin/frameos-engine-worker
+RUN node tools/analyzers/create-ffmpeg-beat-manifest.mjs \
+  --ffmpeg /usr/bin/ffmpeg \
+  --ffmpeg-version "$(ffmpeg -version | head -n 1)" \
+  --ffmpeg-license "Debian ffmpeg package; see /usr/share/doc/ffmpeg/copyright" \
+  --output /app/ffmpeg-beats.frameos-analyzer.json
 ENV NODE_ENV=production
 ENV FRAMEOS_HOST=0.0.0.0
 ENV FRAMEOS_DATA_DIR=/app/.frameos-data
 ENV FRAMEOS_GCLOUD_COMMAND=gcloud
 ENV FRAMEOS_ENGINE_WORKER=/app/bin/frameos-engine-worker
+ENV FRAMEOS_ANALYZER_MANIFESTS=/app/ffmpeg-beats.frameos-analyzer.json
 ENV CLOUDSDK_CONFIG=/gcloud
 EXPOSE 31415
 CMD ["node", "apps/daemon/dist/index.js"]

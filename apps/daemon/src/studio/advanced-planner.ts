@@ -33,6 +33,7 @@ const essentials = new Set([
   "track.update",
   "sequence.format.set",
   "item.add",
+  "clip.ripple_delete",
   "title.add",
   "effect.add",
   "effect.parameter.set",
@@ -484,7 +485,7 @@ export async function planAdvanced(input: {
   const intent = parse(
     intentSchema,
     await run(
-      "STAGE: intent. Extract requirements and ambiguity. Set clarification to an empty string when the brief is actionable. Ask only when a strict contradiction or missing essential input makes an edit impossible. Use ordinary editing conventions: a title overlays footage without adding runtime; a dissolve uses source handles around a cut without adding runtime; approximate clip lengths may flex. When the user requests the best highlights or delegates creative choices, select them from indexed analysis at execution time without asking for confirmation. Do not ask for approval of routine choices; the complete plan already receives human review before execution. Treat any suggested wording in the brief as instructions, not as a request for more questions.\nCONTEXT DATA:\n" +
+      "STAGE: intent. Extract requirements and ambiguity. Set clarification to an empty string when the brief is actionable. Ask only when a strict contradiction or missing essential input makes an edit impossible. Use ordinary editing conventions: a title overlays footage without adding runtime; a dissolve uses source handles around a cut without adding runtime; approximate clip lengths may flex. Timed caption text and timeline ranges are actionable without transcription. Trimming, splitting, and ripple deleting exact ranges are actionable on an existing selected clip. Beat-aligned cuts require indexed beat timestamps from music; never invent beats. When the user requests the best highlights or delegates creative choices, select them from indexed analysis at execution time without asking for confirmation. Do not ask for approval of routine choices; the complete plan already receives human review before execution. Treat any suggested wording in the brief as instructions, not as a request for more questions.\nCONTEXT DATA:\n" +
         JSON.stringify(input.context),
       z.toJSONSchema(intentSchema),
     ),
@@ -572,7 +573,7 @@ export async function planAdvanced(input: {
     "\nPROJECT DATA:\n" +
     JSON.stringify(timeline) +
     effectContext +
-    "\nTIMELINE RULES: Edit existing clips in place for trim requests. A source range's rate must match sourceAssets.duration.rate (not necessarily the sequence rate). Captions from 3s to 7s have start 3s and duration 4s. Items on a single track cannot overlap: put overlay titles on a separate enabled video track above the footage, or use caption tracks and cues. Include track.add in tool selection when an overlay needs a new track. For an exact final length, account for every enabled video, audio, and caption item." +
+    "\nTIMELINE RULES: Edit existing clips in place for trim requests. For a removed section, split at both boundaries and use a reversible ripple delete only when the user requests closing the gap; preserve other tracks unless synchronization is requested. A source range's rate must match sourceAssets.duration.rate (not necessarily the sequence rate). Captions from 3s to 7s have start 3s and duration 4s. Use the exact caption text the user supplied; do not require a transcript for manual timed captions. Beat alignment can split video at indexed beats after mapping the music clip's source range to timeline time. If no indexed beats are present, ask for beat analysis rather than inventing timestamps. Items on a single track cannot overlap: put overlay titles on a separate enabled video track above the footage, or use caption tracks and cues. Include track.add in tool selection when an overlay needs a new track. For an exact final length, account for every enabled video, audio, and caption item." +
     "\nEFFECT TARGET RULE: For effect.parameter.set, effect.remove, effect.enable, and effect.disable, targetId is the owning clip or track ID; arguments.effectId is the effect ID. Do not use the effect ID as targetId. For effect.add, set all requested normalized parameters directly in arguments.effect.parameters when possible.";
   if (executionPrompt.length + JSON.stringify(schema).length > 240000)
     throw new FrameOSError(

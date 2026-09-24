@@ -25,6 +25,7 @@ settings = {
     'FRAMEOS_DOCKER_LOCAL_ONLY': 'true',
     'FRAMEOS_HOSTED_MODE': 'true',
     'FRAMEOS_ENGINE_WORKER': '/app/bin/frameos-engine-worker',
+    'FRAMEOS_ANALYZER_MANIFESTS': '/app/ffmpeg-beats.frameos-analyzer.json',
     'FRAMEOS_GEMINI_MAX_COST_USD_PER_ANALYSIS': '2.00',
     'FRAMEOS_GEMINI_PROVIDER': 'vertex-ai',
     'FRAMEOS_GOOGLE_CLOUD_PROJECT': 'gen-lang-client-0644821693',
@@ -104,7 +105,7 @@ const get = async (path) => {
 };
 assert.equal((await get('/health')).status, 'ok');
 const capabilities = await get('/api/v1/capabilities');
-for (const id of ['engine.mlt', 'media.probe', 'mlt.transition.luma', 'mlt.transition.mix', 'frameos.video.chroma-key', 'frameos.video.gaussian-blur', 'frameos.video.vignette'])
+for (const id of ['engine.mlt', 'media.probe', 'mlt.transition.luma', 'mlt.transition.mix', 'frameos.video.chroma-key', 'frameos.video.gaussian-blur', 'frameos.video.vignette', 'analysis.beats.ffmpeg'])
   assert(capabilities.some(c => c.id === id && c.available), id);
 assert.equal(process.env.FRAMEOS_GEMINI_PROVIDER, 'vertex-ai');
 assert.equal(process.env.FRAMEOS_HOSTED_MODE, 'true');
