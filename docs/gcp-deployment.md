@@ -130,3 +130,25 @@ Google Cloud for `adarshnub/FrameOS`; no GitHub connection currently exists, so
 Google Cloud rejects trigger creation from the CLI. After authorizing the
 repository, create a push trigger for `main` using this file. The project
 service account has the IAP SSH and VM deployment roles required by the file.
+
+## AI effects and hosted sign-in rollout: September 24, 2026
+
+Image `frameos-daemon:ai-32eec72f-7df4-4543-b55f-a02a4ad29da3` was deployed by
+digest `sha256:efb4a72206fca5c8245736fa6e2b8ed4f52f7c423a2b390ba129d763f3354939`.
+Cloud Build passed native chroma key, blur, vignette and animated-title pixel
+checks. The updated planner passed the isolated live Gemini acceptance described
+in [AI effects testing](ai-effects-testing.md), including a montage drawn from
+ten separate five-minute sources. The deployment smoke passed on both the
+isolated candidate and production data. The existing two projects were present
+after rollout.
+
+Public HTTPS checks returned `/studio` 302 to `/login`, unauthenticated
+`/api/v1/projects` 401 and `/health` 200. Chrome displayed the hosted Studio
+sign-in form. The VM smoke also submitted the Secret Manager password over its
+loopback endpoint and verified the resulting session could read projects. A
+human Chrome sign-in and post-login UI walk-through remains to be completed.
+
+The stopped previous container is `frameos-previous-20260924T081144Z`. The
+backup, including `env.before` and `data.tgz`, is
+`/opt/frameos/backups/20260924T081144Z`. The deployed environment contains the
+new hosted password; preserve that setting when rolling back.
