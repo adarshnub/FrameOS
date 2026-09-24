@@ -12,6 +12,7 @@ Target: **1080p, up to 10 source clips, each up to five minutes**. A sequential 
 - Native source loading obtains the real duration before building playlists. The previous lazy loader reduced each playlist entry to one frame.
 - Exports wait for every frame. Requested regions beyond the loaded timeline fail explicitly.
 - Native video layers composite and audio tracks mix explicitly. Affine transforms preserve opacity. Headless Linux workers initialize Qt's offscreen backend so titles remain visible.
+- Selecting a video layer in Studio Properties now exposes an editable native effect stack: chroma key, Gaussian blur, vignette and primary color. Effects can be parameterized, bypassed, removed and reordered. Selecting a title exposes text, font size/weight, color, background and placement. Video layers and titles can receive position, scale, rotation and opacity keyframes at the playhead. These controls write canonical transactions and remain undoable. Browser preview does not establish final effect or animation quality; export a native MP4 to review it.
 - Native exports and contact sheets queue behind the active render to avoid competing for memory. Queued cancellation does not start a worker or let later jobs overtake an active export.
 - AI planning has a configurable ten-minute deadline and one cancellable retry for temporary HTTP 429/503 errors. Planning still requires approval before edits are applied.
 
