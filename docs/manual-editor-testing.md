@@ -42,9 +42,15 @@ Cloud Build `3fe52ea7-d4b1-4bd8-8f56-e72fc10b4126` passed both suites. The [manu
 
 The manual suite took 8 minutes 42 seconds on the temporary build worker (container limited to six CPUs and 6 GB RAM). Sources were synthetic solid colours and tones; that timing is not a prediction for camera footage or complex effects. The production VM has four CPUs, so its timing will differ.
 
-All 182 unit/integration tests and workspace type checks passed. The agent benchmark recorded 17 passes, seven provider-dependent gates and zero failures. Browser interaction and live AI acceptance are still pending.
+At that acceptance, all 182 unit/integration tests and workspace type checks passed. The agent benchmark recorded 17 passes, seven provider-dependent gates and zero failures. The later detached-audio and layered-render revision passed 184 daemon tests, 15 contract tests, the workspace checks, and the same benchmark counts.
 
 `tools/http-editing-smoke.mjs /path/to/two-second-1080p-fixture.mp4` also passed against both the rebuilt local container and the public HTTPS deployment. It creates a clearly named QA project and exercises multipart upload, cookie-authenticated byte ranges, timeline commit, native export and cookie-authenticated artifact download. Run it with the daemon's token/data environment, `ffprobe`, and optional `FRAMEOS_QA_URL`. The hosted QA project is `01a0d17d-569b-716c-ac12-d0aa3789ef5e`; its two-second export is available in Activity.
+
+## Production effects check: September 24, 2026
+
+Build `5680fc24-37cf-4304-a340-5aabde54e63c` deployed commit `9e7fe42` successfully. In Chrome, the hosted session authenticated, a four-second video with source audio was added to the existing manual-effects QA project, and Studio created a separate A1 audio clip. Trimming that audio clip to three seconds through Properties left its picture clip at four seconds. The project's three-layer keyed foreground, animated title, blurred background and detached audio exported successfully as job `01a0d477-6959-750c-be7c-2c78468440fa`.
+
+The output probes as an eight-second, 1920×1080 H.264/AAC MP4. A decoded frame at three seconds visibly contains the blue background, white title and red foreground. The audio measures −24.1 dB mean volume inside the trimmed clip and approximately −91 dB after its out-point. The local native effects suite also passed all six checks, including three-layer compositing and a separately delayed source soundtrack. This is a synthetic reference check, not real-footage or 50-minute effects acceptance.
 
 ## Human editor session
 
@@ -59,7 +65,7 @@ Record the source codec/frame rate, action, project revision, job ID, expected r
 
 ## Remaining gates
 
-- Browser interaction testing was blocked by the environment's browser security policy. API, shipped-JavaScript model and native render checks do not replace drag/trim/playback testing in a supported browser.
+- Chrome click-to-add, audio selection, Properties trimming and export were tested on the live deployment. Dragging trim handles, playback seeking and a full human editor session remain to be accepted.
 - Browser playback still approximates native effects and shows limited layering. Final compositing, typography, retiming and audio processing must be checked in native output.
 - Live-provider AI editing and rendered audiovisual critique remain separate acceptance work.
 - Full After Effects parity is not delivered. See [advanced editing status](advanced-editing-status.md) for the outstanding feature families.
